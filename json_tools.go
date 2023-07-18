@@ -3,20 +3,23 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"golang.org/x/oauth2"
 	"io/fs"
 	"log"
 	"os"
+	"time"
+
+	"golang.org/x/oauth2"
 )
 
-func change_port_creds(CONFIG_FOLDER *string) {
+func change_server_port(CONFIG_FOLDER *string, port int64) {
 	credentials_file := *CONFIG_FOLDER + "credentials.json"
 	creds, err := load_creds(credentials_file)
 	if err != nil {
 		log.Printf("Error loading credentials.json %v", err)
 	}
-	if creds.Installed.RedirectURIs[0] != "http://localhost:5000" {
-		creds.Installed.RedirectURIs[0] = "http://localhost:5000"
+	server_url := fmt.Sprintf("http://localhost:%d", port)
+	if creds.Installed.RedirectURIs[0] != server_url {
+		creds.Installed.RedirectURIs[0] = server_url
 	}
 	save_as_json(creds, credentials_file)
 }
@@ -27,7 +30,7 @@ type Credentials struct {
 type Fields struct {
 	AuthProvider string   `json:"auth_provider_x509_cert_url"`
 	AuthUri      string   `json:"auth_uri"`
-	TokenUri      string   `json:"token_uri"`
+	TokenUri     string   `json:"token_uri"`
 	ClientID     string   `json:"client_id"`
 	ClientSecret string   `json:"client_secret"`
 	ProjectID    string   `json:"project_id"`
@@ -83,6 +86,15 @@ func saveToken(path string, token *oauth2.Token) {
 	}
 	defer f.Close()
 	json.NewEncoder(f).Encode(token)
+}
+func token_expired(token_expiry *time.Time) bool {
+	cur_time := time.Now()
+	if cur_time.Sub(*token_expiry).Seconds() >= 0 {
+		return true
+
+	} else {
+		return false
+	}
 }
 
 // Retrieves a token from a local file.

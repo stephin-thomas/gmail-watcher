@@ -2,17 +2,16 @@ package main
 
 import (
 	"context"
-	//"encoding/json"
 	"fmt"
+
 	"github.com/gen2brain/beeep"
-	//"io"
+
 	"log"
 	"net/http"
 	"os"
 	"sync"
 	"time"
-	// "io"
-	// b64 "encoding/base64"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
@@ -41,6 +40,7 @@ func main() {
 		fmt.Println(" login :- Add a gmail account (More than one account could be added this way)\n --help :- Show help")
 		return
 	}
+
 	var CONFIG_FOLDER string = get_config_folder()
 	var web_server WebServer = WebServer{
 		server_running: false,
@@ -49,41 +49,82 @@ func main() {
 	}
 	create_config_folder(CONFIG_FOLDER)
 	ctx := context.Background()
-	change_port_creds(&CONFIG_FOLDER)
-	b, err := os.ReadFile(CONFIG_FOLDER + "credentials.json")
+	change_server_port(&CONFIG_FOLDER, 5000)
+	CREDENTIALS_FILE, err := os.ReadFile(CONFIG_FOLDER + "credentials.json")
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v\n Follow the steps 'Enable the API' and 'Authorize credentials for a desktop application' from the following page\n https://developers.google.com/gmail/api/quickstart/go \n Note:- Ignore all other steps\n rename the downloaded file to credentials.json and copy it to\n~/.config/gmail_watcher", err)
 	}
 
 	// If modifying these scopes, delete your previously saved token.json.
-	config, err := google.ConfigFromJSON(b, gmail.GmailReadonlyScope)
+	config, err := google.ConfigFromJSON(CREDENTIALS_FILE, gmail.GmailReadonlyScope)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
-	tokFiles, err := load_old_ids(CONFIG_FOLDER + "Config.json")
-	if err != nil || args[1] == "login" {
-		if err != nil {
-			fmt.Println("Error loading config.json")
-		}
-		tokFiles = gen_random_token_name(tokFiles, &CONFIG_FOLDER)
-		save_as_json(tokFiles, CONFIG_FOLDER+"Config.json")
+	var tokFiles []string
+	if args[1] == "login" {
+		tokFiles = load_token_files(CONFIG_FOLDER, true)
+	} else {
+		tokFiles = load_token_files(CONFIG_FOLDER, false)
 	}
+	tokFiles = refresh_token_if_expired(CONFIG_FOLDER, tokFiles)
 	client_srvs := collect_gmail_serv(config, &ctx, &tokFiles, &web_server, &CONFIG_FOLDER)
 	for {
+		if len(client_srvs) == 0 {
+			client_srvs = collect_gmail_serv(config, &ctx, &tokFiles, &web_server, &CONFIG_FOLDER)
+		}
 		for _, client_srv := range client_srvs {
+			log.Println("Serving", client_srv)
 			err := email_main(client_srv)
 			if err != nil {
+				log.Println("Sleeping:-", 10*time.Second)
 				time.Sleep(10 * time.Second)
 			}
 		}
+		log.Println("Sleeping:-", 30*time.Second)
 		time.Sleep(30 * time.Second)
 	}
 }
+
+func SlicePop[T any](s []T, i int) []T {
+	// elem := s[i]
+	s = append(s[:i], s[i+1:]...)
+	return s
+}
+
+func refresh_token_if_expired(CONFIG_FOLDER string, tokFiles []string) []string {
+	var newtokFiles []string
+	newtokFiles = tokFiles
+	// copy(newtokFiles, tokFiles)
+	for i, tokFile := range tokFiles {
+		log.Println("Checking if token is expired:-", tokFile)
+		tok, err := tokenFromFile(tokFile)
+		if err != nil {
+			log.Println("Error creating token from token file:-", err)
+		} else {
+			expiry_time := tok.Expiry
+			if token_expired(&expiry_time) {
+				beeep.Notify("Token Expired", fmt.Sprintln("Token expired on", &expiry_time, "Relogin to continue using Gmail Notifier"), "assets/email_notify.webp")
+				log.Println("Removing expired token:-", tokFile[i])
+				newtokFiles = SlicePop(newtokFiles, i)
+				newtokFiles = add_token(newtokFiles, CONFIG_FOLDER)
+			} else {
+				log.Println("Found token not expired:-", tokFile[i])
+
+			}
+		}
+	}
+	log.Printf("Initial Token Files = %v\n Final Token Files after removing errors %v", tokFiles, newtokFiles)
+	return newtokFiles
+}
+
 func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[]string, web_server *WebServer, CONFIG_FOLDER *string) []*clientService {
+	log.Println("Collecting Gmail Clients from configuration from tokens", tokFiles)
 	var gmail_services []*clientService
+
 	for i, tokFile := range *tokFiles {
 		db := fmt.Sprintf("%sid_db%d.json", *CONFIG_FOLDER, i)
 		client := getClient(config, tokFile, web_server)
+
 		srv, err := get_gmail_serv(client, ctx)
 		for err != nil {
 			srv, err = get_gmail_serv(client, ctx)
@@ -98,13 +139,17 @@ func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[
 		}
 		log.Println("Successfully created client")
 		gmail_services = append(gmail_services, &client_service)
-		usr_name, err := client_service.gmail_service.Users.GetProfile("me").Do()
-		if err == nil {
-			fmt.Println("Created", usr_name.EmailAddress)
-		}
-
+		get_email(&client_service)
 	}
 	return gmail_services
+}
+
+func get_email(client_service *clientService) (*gmail.Profile, error) {
+	usr_name, err := client_service.gmail_service.Users.GetProfile("me").Do()
+	if err == nil {
+		fmt.Println("Created", usr_name.EmailAddress)
+	}
+	return usr_name, err
 }
 
 func get_gmail_serv(client *http.Client, ctx *context.Context) (*gmail.Service, error) {
@@ -118,8 +163,8 @@ func email_main(client_srv *clientService) error {
 	if err != nil {
 		return err
 	}
-	var updated_emails []string
-	updated_emails = get_updated_emails(msg_list, client_srv)
+	//var updated_emails []string
+	var updated_emails []string = get_updated_emails(msg_list, client_srv)
 	for i, msg := range updated_emails {
 		if i > 5 {
 			break
@@ -137,6 +182,7 @@ func show_emails(msg *gmail.Message) {
 	if err != nil {
 		log.Println("Error during notification", err)
 	}
+	log.Println(msg)
 	log.Println(msg.Snippet)
 }
 func get_updated_emails(msg_list *gmail.ListMessagesResponse, client_srv *clientService) []string {
