@@ -36,12 +36,8 @@ func getTokenFromWeb(config *oauth2.Config, web_server *WebServer) *oauth2.Token
 		web_server.server_running = true
 		web_server.wg.Wait()
 		authCode = <-web_server.channel_main
-	} else {
-		web_server.wg.Add(1)
-		web_server.wg.Wait()
-		authCode = <-web_server.channel_main
-		web_server.web_server.Close()
 	}
+	web_server.web_server.Close()
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
 		log.Fatalf("Unable to retrieve token from web: %v", err)
@@ -50,6 +46,7 @@ func getTokenFromWeb(config *oauth2.Config, web_server *WebServer) *oauth2.Token
 }
 
 func handle_connection(wg *sync.WaitGroup, c *chan string) *http.Server {
+	log.Println("Getting code from response")
 	tokenHandler := func(w http.ResponseWriter, req *http.Request) {
 		authCode := req.URL.Query().Get("code")
 		*c <- authCode
@@ -59,14 +56,16 @@ func handle_connection(wg *sync.WaitGroup, c *chan string) *http.Server {
 	srv := &http.Server{Addr: ":5000",
 		Handler: http.HandlerFunc(tokenHandler),
 	}
-
-	go func() {
-
-		fmt.Println("Starting webserver on port 5000")
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-			log.Printf("Server returned: %v", err)
-		}
-	}()
-
+	go start_server(srv, wg)
 	return srv
+}
+
+func start_server(srv *http.Server, wg *sync.WaitGroup) {
+	fmt.Println("Starting webserver on port 5000")
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		log.Printf("Server returned: %v", err)
+	}
+	//return srv
+	wg.Wait() // let main know we are done cleaning up
+
 }
