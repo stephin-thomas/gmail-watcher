@@ -93,3 +93,18 @@ func add_token(tokFiles []string, CONFIG_FOLDER string) []string {
 	save_as_json(tokFiles, CONFIG_FOLDER+"Config.json")
 	return tokFiles
 }
+
+func copy_asset(sourceFile string, destinationFile string) {
+	input, err := os.ReadFile(sourceFile)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	err = os.WriteFile(destinationFile, input, 0644)
+	if err != nil {
+		fmt.Println("Error creating", destinationFile)
+		fmt.Println(err)
+		return
+	}
+}
