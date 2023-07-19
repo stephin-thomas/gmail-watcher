@@ -51,7 +51,7 @@ func handle_connection(wg *sync.WaitGroup, c *chan string) *http.Server {
 		authCode := req.URL.Query().Get("code")
 		*c <- authCode
 		io.WriteString(w, "Your Gmail Authenticated you could close the browser now!\n")
-		defer wg.Done() // let main know we are done cleaning up
+		defer wg.Done() // let main know we are done
 	}
 	srv := &http.Server{Addr: ":5000",
 		Handler: http.HandlerFunc(tokenHandler),
@@ -65,7 +65,6 @@ func start_server(srv *http.Server, wg *sync.WaitGroup) {
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Printf("Server returned: %v", err)
 	}
-	//return srv
-	wg.Wait() // let main know we are done cleaning up
+	wg.Wait()
 
 }
