@@ -47,7 +47,8 @@ func main() {
 		channel_main:   make(chan string, 10),
 		wg:             &sync.WaitGroup{},
 	}
-	create_config_folder(CONFIG_FOLDER)
+	create_folder(CONFIG_FOLDER)
+	//create_folder(CONFIG_FOLDER + "assets")
 	ctx := context.Background()
 	change_server_port(&CONFIG_FOLDER, 5000)
 	CREDENTIALS_FILE, err := os.ReadFile(CONFIG_FOLDER + "credentials.json")
@@ -171,14 +172,16 @@ func email_main(client_srv *clientService) error {
 		}
 		msg, err := get_msg(client_srv.gmail_service, user, msg)
 		if err == nil {
-			show_emails(msg)
+			profile, _ := get_email(client_srv)
+			email_id := profile.EmailAddress
+			show_emails(msg, &email_id)
 		}
 	}
 	return nil
 }
 
-func show_emails(msg *gmail.Message) {
-	err := beeep.Notify("New Email Received", msg.Snippet, "assets/email_notify.webp")
+func show_emails(msg *gmail.Message, user_email *string) {
+	err := beeep.Notify(fmt.Sprintf("Email:-%s", *user_email), msg.Snippet, "assets/notification.png")
 	if err != nil {
 		log.Println("Error during notification", err)
 	}
