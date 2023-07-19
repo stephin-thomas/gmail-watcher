@@ -67,7 +67,7 @@ func save_as_json(id_list any, file_name string) error {
 	return err
 }
 
-func create_config_folder(path string) {
+func create_folder(path string) {
 	_, err := os.Stat(path)
 	if err != nil {
 		err := os.Mkdir(path, fs.ModePerm)
