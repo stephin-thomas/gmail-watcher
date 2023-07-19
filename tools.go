@@ -16,12 +16,8 @@ func get_config_folder() string {
 	return CONFIG_FOLDER
 }
 func isAvailable(haystack_array []string, needle string) bool {
-
-	// iterate using the for loop
 	for i := 0; i < len(haystack_array); i++ {
-		// check
 		if haystack_array[i] == needle {
-			// return true
 			return true
 		}
 	}
