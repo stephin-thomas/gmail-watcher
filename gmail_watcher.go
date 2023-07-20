@@ -67,7 +67,7 @@ func main() {
 	} else {
 		tokFiles = load_token_files(CONFIG_FOLDER, false)
 	}
-	tokFiles = refresh_token_if_expired(CONFIG_FOLDER, tokFiles)
+	//tokFiles = refresh_token_if_expired(CONFIG_FOLDER, tokFiles)
 	client_srvs := collect_gmail_serv(config, &ctx, &tokFiles, &web_server, &CONFIG_FOLDER)
 	for {
 		if len(client_srvs) == 0 {
