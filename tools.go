@@ -5,13 +5,14 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 
+	"github.com/adrg/xdg"
 	"google.golang.org/api/gmail/v1"
 )
 
 func get_config_folder() string {
-	dirname, _ := os.UserHomeDir()
-	var CONFIG_FOLDER string = dirname + "/.config/gmail_watcher/"
+	var CONFIG_FOLDER string = filepath.Join(xdg.ConfigHome, "gmail_watcher")
 	log.Println("Config Folder:-", CONFIG_FOLDER)
 	return CONFIG_FOLDER
 }
@@ -73,7 +74,7 @@ func load_token_files(CONFIG_FOLDER string, append bool) []string {
 	if err != nil || append {
 		// var sample_tokfile []string
 		// tokFiles = sample_tokfile
-		fmt.Println("Error loading config.json", err)
+		fmt.Println("Error loading config.json\n pass --login to login", err)
 		tokFiles = add_token(tokFiles, CONFIG_FOLDER)
 	} else {
 		log.Println("Previously existing tokens", tokFiles)
@@ -93,14 +94,17 @@ func add_token(tokFiles []string, CONFIG_FOLDER string) []string {
 func copy_asset(sourceFile string, destinationFile string) {
 	input, err := os.ReadFile(sourceFile)
 	if err != nil {
-		fmt.Println(err)
+		log.Println("Couldn't find assets folder", err)
 		return
+	}
+	if _, err := os.Stat(destinationFile); os.IsNotExist(err) {
+		err = os.WriteFile(destinationFile, input, 0644)
+		if err != nil {
+			fmt.Println("Error creating", destinationFile)
+			fmt.Println(err)
+			return
+		}
+
 	}
 
-	err = os.WriteFile(destinationFile, input, 0644)
-	if err != nil {
-		fmt.Println("Error creating", destinationFile)
-		fmt.Println(err)
-		return
-	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/gen2brain/beeep"
 
@@ -31,27 +32,32 @@ type clientService struct {
 	old_ids       []string
 }
 
+var CONFIG_FOLDER string = get_config_folder()
+
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	args := os.Args
 	if !(len(args) > 1) {
 		args = append(args, "None")
 	}
 	if args[1] == "--help" {
-		fmt.Println(" login :- Add a gmail account (More than one account could be added this way)\n --help :- Show help")
+		fmt.Println(" --login :- Add a gmail account (More than one account could be added this way)\n --help :- Show help")
 		return
 	}
 
-	var CONFIG_FOLDER string = get_config_folder()
 	var web_server WebServer = WebServer{
 		server_running: false,
 		channel_main:   make(chan string, 10),
 		wg:             &sync.WaitGroup{},
 	}
 	create_folder(CONFIG_FOLDER)
-	//create_folder(CONFIG_FOLDER + "assets")
+	assets_source_path := "assets/email_notify.webp"
+	assets_path := filepath.Join(CONFIG_FOLDER, assets_source_path)
+	//This is a temporary function to copy assets. Should be removed when assets folders are created by the installation
+	copy_asset(assets_source_path, assets_path)
 	ctx := context.Background()
 	change_server_port(&CONFIG_FOLDER, 5000)
-	CREDENTIALS_FILE, err := os.ReadFile(CONFIG_FOLDER + "credentials.json")
+	CREDENTIALS_FILE, err := os.ReadFile(filepath.Join(CONFIG_FOLDER, "credentials.json"))
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v\n Follow the steps 'Enable the API' and 'Authorize credentials for a desktop application' from the following page\n https://developers.google.com/gmail/api/quickstart/go \n Note:- Ignore all other steps\n rename the downloaded file to credentials.json and copy it to\n~/.config/gmail_watcher", err)
 	}
@@ -62,7 +68,7 @@ func main() {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
 	var tokFiles []string
-	if args[1] == "login" {
+	if args[1] == "--login" {
 		tokFiles = load_token_files(CONFIG_FOLDER, true)
 	} else {
 		tokFiles = load_token_files(CONFIG_FOLDER, false)
@@ -181,7 +187,7 @@ func email_main(client_srv *clientService) error {
 }
 
 func show_emails(msg *gmail.Message, user_email *string) {
-	err := beeep.Notify(fmt.Sprintf("Email:-%s", *user_email), msg.Snippet, "assets/notification.png")
+	err := beeep.Notify(fmt.Sprintf("Email:-%s", *user_email), msg.Snippet, filepath.Join(CONFIG_FOLDER, "assets/notification.png"))
 	if err != nil {
 		log.Println("Error during notification", err)
 	}

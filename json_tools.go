@@ -6,13 +6,14 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"golang.org/x/oauth2"
 )
 
 func change_server_port(CONFIG_FOLDER *string, port int64) {
-	credentials_file := *CONFIG_FOLDER + "credentials.json"
+	credentials_file := filepath.Join(*CONFIG_FOLDER, "credentials.json")
 	creds, err := load_creds(credentials_file)
 	if err != nil {
 		log.Printf("Error loading credentials.json %v", err)
