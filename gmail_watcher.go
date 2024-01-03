@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
 
 	"github.com/gen2brain/beeep"
@@ -51,7 +52,7 @@ func main() {
 		wg:             &sync.WaitGroup{},
 	}
 	create_folder(CONFIG_FOLDER)
-	assets_source_path := "assets/email_notify.webp"
+	assets_source_path := "assets/notification.png"
 	assets_path := filepath.Join(CONFIG_FOLDER, assets_source_path)
 	//This is a temporary function to copy assets. Should be removed when assets folders are created by the installation
 	copy_asset(assets_source_path, assets_path)
@@ -80,7 +81,7 @@ func main() {
 			client_srvs = collect_gmail_serv(config, &ctx, &tokFiles, &web_server, &CONFIG_FOLDER)
 		}
 		for _, client_srv := range client_srvs {
-			log.Println("Serving", client_srv)
+			//log.Println("Serving", client_srv)
 			err := email_main(client_srv)
 			if err != nil {
 				log.Println("Sleeping:-", 10*time.Second)
@@ -93,7 +94,6 @@ func main() {
 }
 
 func SlicePop[T any](s []T, i int) []T {
-	// elem := s[i]
 	s = append(s[:i], s[i+1:]...)
 	return s
 }
@@ -129,7 +129,10 @@ func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[
 	var gmail_services []*clientService
 
 	for i, tokFile := range *tokFiles {
-		db := fmt.Sprintf("%sid_db%d.json", *CONFIG_FOLDER, i)
+		db_file := fmt.Sprintf("id_db%d.json", i)
+		db := path.Join(*CONFIG_FOLDER, db_file)
+		log.Println("DB created at ", db)
+		//db := fmt.Sprintf("%sid_db%d.json", *CONFIG_FOLDER, i)
 		client := getClient(config, tokFile, web_server)
 
 		srv, err := get_gmail_serv(client, ctx)
@@ -153,8 +156,10 @@ func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[
 
 func get_email(client_service *clientService) (*gmail.Profile, error) {
 	usr_name, err := client_service.gmail_service.Users.GetProfile("me").Do()
-	if err == nil {
-		fmt.Println("Created", usr_name.EmailAddress)
+
+	if err != nil {
+		log.Fatal("Error getting email profile")
+
 	}
 	return usr_name, err
 }
@@ -191,8 +196,8 @@ func show_emails(msg *gmail.Message, user_email *string) {
 	if err != nil {
 		log.Println("Error during notification", err)
 	}
-	log.Println(msg)
-	log.Println(msg.Snippet)
+	//log.Println(msg)
+	//log.Println(msg.Snippet)
 }
 func get_updated_emails(msg_list *gmail.ListMessagesResponse, client_srv *clientService) []string {
 	if len(client_srv.old_ids) == 0 {

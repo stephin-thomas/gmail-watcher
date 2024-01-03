@@ -1,15 +1,19 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/adrg/xdg"
 	"google.golang.org/api/gmail/v1"
 )
+
+var CONFIG_ID_FILE string = path.Join(CONFIG_FOLDER, "Config.json")
 
 func get_config_folder() string {
 	var CONFIG_FOLDER string = filepath.Join(xdg.ConfigHome, "gmail_watcher")
@@ -25,11 +29,12 @@ func isAvailable(haystack_array []string, needle string) bool {
 	return false
 }
 func gen_random_token_name(tokFiles []string, CONFIG_FOLDER *string) []string {
-	token_file_name := *CONFIG_FOLDER + "token" + fmt.Sprint(rand.Intn(100)) + ".json"
-	for isAvailable(tokFiles, token_file_name) {
-		token_file_name = *CONFIG_FOLDER + "token" + fmt.Sprint(rand.Intn(100)) + ".json"
+	token_file_name := "token" + fmt.Sprint(rand.Intn(100)) + ".json"
+	token_file_path := path.Join(*CONFIG_FOLDER, token_file_name)
+	for isAvailable(tokFiles, token_file_path) {
+		return gen_random_token_name(tokFiles, CONFIG_FOLDER)
 	}
-	tokFiles = append(tokFiles, token_file_name)
+	tokFiles = append(tokFiles, token_file_path)
 	log.Printf("Token file name generated %v", tokFiles)
 	return tokFiles
 }
@@ -69,8 +74,8 @@ func create_id_list(records []*gmail.Message) []string {
 }
 
 func load_token_files(CONFIG_FOLDER string, append bool) []string {
-	log.Println("Loading Tokens from ", CONFIG_FOLDER+"Config.json")
-	tokFiles, err := load_old_ids(CONFIG_FOLDER + "Config.json")
+	log.Println("Loading Tokens from ", CONFIG_ID_FILE)
+	tokFiles, err := load_old_ids(CONFIG_ID_FILE)
 	if err != nil || append {
 		// var sample_tokfile []string
 		// tokFiles = sample_tokfile
@@ -87,24 +92,30 @@ func add_token(tokFiles []string, CONFIG_FOLDER string) []string {
 	log.Println("Adding new token")
 	tokFiles = gen_random_token_name(tokFiles, &CONFIG_FOLDER)
 	log.Println("Added random token file as:-", tokFiles)
-	save_as_json(tokFiles, CONFIG_FOLDER+"Config.json")
+	save_as_json(tokFiles, CONFIG_ID_FILE)
 	return tokFiles
 }
 
 func copy_asset(sourceFile string, destinationFile string) {
-	input, err := os.ReadFile(sourceFile)
-	if err != nil {
-		log.Println("Couldn't find assets folder", err)
-		return
-	}
+	input, err1 := os.ReadFile(sourceFile)
+	err2 := os.MkdirAll(filepath.Dir(destinationFile), os.ModePerm)
 	if _, err := os.Stat(destinationFile); os.IsNotExist(err) {
-		err = os.WriteFile(destinationFile, input, 0644)
-		if err != nil {
-			fmt.Println("Error creating", destinationFile)
-			fmt.Println(err)
+		file, err1 := os.Create(destinationFile)
+		_, err2 := file.Write(input)
+		//err = os.WriteFile(file, input, 0644)
+		if err1 != nil || err2 != nil {
+			log.Println(err)
+			log.Println("Error creating", destinationFile)
 			return
 		}
 
+	}
+	err := errors.Join(err1, err2)
+
+	// Handle the combined error
+	if err != nil {
+		fmt.Println("Error:", err)
+		// Additional error handling logic can be added here
 	}
 
 }
