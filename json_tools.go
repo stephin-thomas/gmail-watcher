@@ -6,50 +6,22 @@ import (
 	"io/fs"
 	"log"
 	"os"
-	"path/filepath"
+
 	"time"
 
 	"golang.org/x/oauth2"
 )
 
-func change_server_port(CONFIG_FOLDER *string, port int64) {
-	credentials_file := filepath.Join(*CONFIG_FOLDER, "credentials.json")
-	creds, err := load_creds(credentials_file)
-	if err != nil {
-		log.Printf("Error loading credentials.json %v", err)
-	}
+func change_server_port(creds *oauth2.Config, port int64) {
 	server_url := fmt.Sprintf("http://localhost:%d", port)
-	if creds.Installed.RedirectURIs[0] != server_url {
-		creds.Installed.RedirectURIs[0] = server_url
+	if creds.RedirectURL != server_url {
+		creds.RedirectURL = server_url
+		serialize_n_save(*creds, CREDENTIALS_FILE)
 	}
-	save_as_json(creds, credentials_file)
 }
 
-type Credentials struct {
-	Installed Fields `json:"installed"`
-}
-type Fields struct {
-	AuthProvider string   `json:"auth_provider_x509_cert_url"`
-	AuthUri      string   `json:"auth_uri"`
-	TokenUri     string   `json:"token_uri"`
-	ClientID     string   `json:"client_id"`
-	ClientSecret string   `json:"client_secret"`
-	ProjectID    string   `json:"project_id"`
-	RedirectURIs []string `json:"redirect_uris"`
-}
-
-func load_creds(file_name string) (Credentials, error) {
-	var cred_json Credentials
-	json_file, err := os.ReadFile(file_name)
-	if err != nil {
-		log.Fatalln("Unable to load credentials.json", err)
-	}
-	err2 := json.Unmarshal(json_file, &cred_json)
-	return cred_json, err2
-
-}
-func load_old_ids(file_name string) ([]string, error) {
-	var id_list []string
+func load_old_msg_ids(file_name string) (map[string]struct{}, error) {
+	var id_list map[string]struct{}
 	json_file, err := os.ReadFile(file_name)
 	if err != nil {
 		return id_list, err
@@ -59,12 +31,29 @@ func load_old_ids(file_name string) ([]string, error) {
 
 }
 
-func save_as_json(id_list any, file_name string) error {
-	json_b, err := json.Marshal(id_list)
+func load_existing_tokens() ([]string, error) {
+	var tok_list []string
+	json_file, err := os.ReadFile(LOGIN_TOKENS_LIST_FILE)
+	if err != nil {
+		return nil, err
+	} else {
+		err2 := json.Unmarshal(json_file, &tok_list)
+		return tok_list, err2
+	}
+}
+
+func (c clientService) save() error {
+	err := serialize_n_save(c.id_db, c.db)
+	return err
+}
+
+func serialize_n_save(json_unser any, file_name string) error {
+	json_b, err := json.Marshal(json_unser)
 	if err != nil {
 		return err
 	}
 	err = os.WriteFile(file_name, json_b, 0644)
+	log.Println("Saved ", file_name)
 	return err
 }
 
@@ -88,11 +77,11 @@ func saveToken(path string, token *oauth2.Token) {
 	defer f.Close()
 	json.NewEncoder(f).Encode(token)
 }
+
 func token_expired(token_expiry *time.Time) bool {
 	cur_time := time.Now()
 	if cur_time.Sub(*token_expiry).Seconds() >= 0 {
 		return true
-
 	} else {
 		return false
 	}
