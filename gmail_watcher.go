@@ -26,12 +26,21 @@ type clientService struct {
 	id_db         *map[string]struct{}
 }
 
+func (c clientService) update_msg(needle string) bool {
+	if _, ok := (*c.id_db)[needle]; ok {
+		return false
+	} else {
+		(*c.id_db)[needle] = struct{}{}
+		return true
+	}
+}
+
 var CONFIG_FOLDER string = get_config_folder()
 
 var CREDENTIALS_FILE = filepath.Join(CONFIG_FOLDER, "credentials.json")
 var LOGIN_TOKENS_LIST_FILE = filepath.Join(CONFIG_FOLDER, "login_tokens.json")
 var PORT int64 = 5000
-var NOTIFICATION_ICON = filepath.Join(CONFIG_FOLDER, "assets/email_notify.webp")
+var NOTIFICATION_ICON = filepath.Join(CONFIG_FOLDER, "assets/notification.png")
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -47,6 +56,7 @@ func main() {
 	create_folder(CONFIG_FOLDER)
 	assets_source_path := "assets/notification.png"
 	assets_path := filepath.Join(CONFIG_FOLDER, assets_source_path)
+
 	//This is a temporary function to copy assets. Should be removed when assets folders are created by the installation
 	copy_asset(assets_source_path, assets_path)
 	ctx := context.Background()
@@ -69,25 +79,29 @@ func main() {
 		tokFiles = make([]string, 0)
 	}
 
-	if args[1] == "--login" {
+	if args[1] == "--login" || len(tokFiles) == 0 {
+		if len(tokFiles) == 0 && args[1] != "--login" {
+			fmt.Println("No saved accounts found Log in")
+		}
 		token := getTokenFromWeb(config)
 		token_file_path := add_token(&tokFiles)
 		saveToken(*token_file_path, token)
 	}
-	if len(tokFiles) == 0 {
-		fmt.Println("No saved accounts found try again")
-		return
-	}
 	max_retries := 3
 	var client_srvs []*clientService
 	for i := 0; i < max_retries; i++ {
-		client_srvs = collect_gmail_serv(config, &ctx, &tokFiles, &CONFIG_FOLDER)
-		if !(len(client_srvs) == 0) {
+		client_srvs, err = collect_gmail_serv(config, &ctx, &tokFiles, &CONFIG_FOLDER)
+		if err == nil {
 			break
 		}
 	}
+	if err != nil {
+		log.Println("Couldn't construct any clients")
+		beeep.Notify("Fatal Error", "Couldn't construct any clients exiting", NOTIFICATION_ICON)
+	}
 	if len(client_srvs) == 0 {
-		fmt.Println("Couldn't construct any clients")
+		log.Println("No clients found")
+		beeep.Notify("Fatal Error", "No clients found", NOTIFICATION_ICON)
 		return
 	}
 	for {
@@ -104,6 +118,8 @@ func main() {
 					beeep.Notify("Error", "Shutting down Gmail Watcher due to errors", NOTIFICATION_ICON)
 					return
 				}
+			} else {
+				retry = 0
 			}
 		}
 		log.Println("Sleeping:-", 30*time.Second)
@@ -111,56 +127,19 @@ func main() {
 	}
 }
 
-func SlicePop[T any](s []T, i int) []T {
-	s = append(s[:i], s[i+1:]...)
-	return s
-}
-
-func refresh_token_if_expired(CONFIG_FOLDER string, tokFiles []string) []string {
-	var newtokFiles []string
-	newtokFiles = tokFiles
-	// copy(newtokFiles, tokFiles)
-	for i, tokFile := range tokFiles {
-		log.Println("Checking if token is expired:-", tokFile)
-		tok, err := tokenFromFile(tokFile)
-		if err != nil {
-			log.Println("Error creating token from token file:-", err)
-		} else {
-			expiry_time := tok.Expiry
-			if token_expired(&expiry_time) {
-				beeep.Notify("Token Expired", fmt.Sprintln("Token expired on", &expiry_time, "Relogin to continue using Gmail Notifier"), NOTIFICATION_ICON)
-				log.Println("Removing expired token:-", tokFile[i])
-				newtokFiles = SlicePop(newtokFiles, i)
-				add_token(&newtokFiles)
-			} else {
-				log.Println("Found token not expired:-", tokFile[i])
-
-			}
-		}
-	}
-	log.Printf("Initial Token Files = %v\n Final Token Files after removing errors %v", tokFiles, newtokFiles)
-	return newtokFiles
-}
-
-func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[]string, CONFIG_FOLDER *string) []*clientService {
+func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[]string, CONFIG_FOLDER *string) ([]*clientService, error) {
 	log.Println("Collecting Gmail Clients from configuration from tokens", tokFiles)
 	var gmail_services []*clientService
 
 	for _, tokFile := range *tokFiles {
 		client := getClient(config, tokFile)
-
 		srv, err := get_gmail_serv(client, ctx)
-		// db_file := fmt.Sprintf("id_db_%s", tokFile)
-		// db := path.Join(*CONFIG_FOLDER, db_file)
-		// log.Println("DB created at ", db)
 		email, err := get_email(srv)
 		db_file := fmt.Sprintf("id_db_%s.json", email.EmailAddress)
 		db := path.Join(*CONFIG_FOLDER, db_file)
 		log.Println("Using DB at", db)
 		for err != nil {
-			srv, err = get_gmail_serv(client, ctx)
-			log.Println("Couldn't create a gmail service trying again in 30s")
-			time.Sleep(30 * time.Second)
+			return nil, err
 		}
 		id_db, err := load_old_msg_ids(db)
 		if err != nil {
@@ -176,7 +155,7 @@ func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[
 		gmail_services = append(gmail_services, &client_service)
 		//get_email(&client_service)
 	}
-	return gmail_services
+	return gmail_services, nil
 }
 
 func get_email(gmail_service *gmail.Service) (*gmail.Profile, error) {
@@ -203,24 +182,27 @@ func email_main(client_srv *clientService) error {
 	}
 	//var updated_emails []string
 	log.Printf("Total msgs from google:- %d\n Using only:- 15", len(msg_list.Messages))
-	msgs := msg_list.Messages[0:15]
-	id_db_update := false
+	// msgs := msg_list.Messages[0:15]
+	msgs := msg_list.Messages
+	var max_shown int8 = 15
+	var shown_index int8 = 0
 	for _, msg := range msgs {
-		if !check_if_value_present(msg.Id, client_srv.id_db) {
+		if client_srv.update_msg(msg.Id) {
+			shown_index = shown_index + 1
 			msg, err := get_msg(client_srv.gmail_service, user, msg.Id)
-			(*client_srv.id_db)[msg.Id] = struct{}{}
-			id_db_update = true
+			if err != nil {
+				return err
+			}
 			if err == nil {
-				// profile, _ := get_email(client_srv.gmail_service)
-				// email_id := profile.EmailAddress
-				// log.Println(*msg)
-				show_emails(msg, &client_srv.email_id)
+				if max_shown < shown_index {
+					show_emails(msg, &client_srv.email_id)
+				}
 			} else {
 				log.Fatalf("error occured getting email %v", err)
 			}
 		}
 	}
-	if id_db_update {
+	if shown_index > 0 {
 		err := client_srv.save()
 		if err != nil {
 			log.Fatalln("Error saving db database", client_srv.db, err)
@@ -234,23 +216,7 @@ func show_emails(msg *gmail.Message, user_email *string) {
 	if err != nil {
 		log.Println("Error during notification", err)
 	}
-	//log.Println(msg)
-	//log.Println(msg.Snippet)
 }
-
-// func get_updated_emails(msg_list *[]*gmail.Message, client_srv *clientService) *map[string]struct{} {
-// 	id_list := create_id_list(msg_list)
-// 	diff := list_difference(id_list, client_srv.id_db)
-// 	if len(*diff) > 0 {
-// 		fmt.Println("Found Difference")
-// 		serialize_n_save(id_list, client_srv.db)
-// 		client_srv.id_db = id_list
-// 	} else {
-// 		log.Println("No new emails found")
-
-// 	}
-// 	return diff
-// }
 
 func get_msg_ids(srv *gmail.Service, user string) (*gmail.ListMessagesResponse, error) {
 	msg_list, err := srv.Users.Messages.List(user).Do()

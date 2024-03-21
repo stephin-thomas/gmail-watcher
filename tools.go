@@ -27,14 +27,6 @@ func add_random_token_path(tokFiles *[]string) *string {
 	return &token_file_path
 }
 
-func check_if_value_present(needle string, haystack *map[string]struct{}) bool {
-	if _, ok := (*haystack)[needle]; ok {
-		return true
-	} else {
-		return false
-	}
-}
-
 // func list_difference(new *map[string]struct{}, old *map[string]struct{}) *map[string]struct{} {
 // 	diff := map[string]struct{}{}
 // 	max_try := 3
@@ -89,7 +81,7 @@ func copy_asset(sourceFile string, destinationFile string) {
 
 	// Handle the combined error
 	if err != nil {
-		fmt.Println("Error:", err)
+		log.Println("Error:", err)
 		// Additional error handling logic can be added here
 	}
 

@@ -16,7 +16,7 @@ func getClient(config *oauth2.Config, tokFile string) *http.Client {
 	log.Println("Creating Client")
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		fmt.Println("Error creating client for token file\n", err, "\nGetting new file")
+		log.Println("Error creating client for token file\n", err, "\nGetting new file")
 		tok = getTokenFromWeb(config)
 		saveToken(tokFile, tok)
 	}
@@ -61,7 +61,7 @@ func handle_connection(wg *sync.WaitGroup, c *chan string) *http.Server {
 }
 
 func start_server(srv *http.Server) {
-	fmt.Println("Starting webserver on port 5000")
+	log.Println("Starting webserver on port 5000")
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Printf("Server returned: %v", err)
 	}
