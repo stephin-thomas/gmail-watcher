@@ -20,7 +20,7 @@ func get_config_folder() string {
 }
 
 func add_random_token_path(tokFiles *[]string) *string {
-	token_file_name := fmt.Sprintf("token%s.json", uuid.NewString())
+	token_file_name := fmt.Sprintf("token_%s.json", uuid.NewString())
 	token_file_path := path.Join(CONFIG_FOLDER, token_file_name)
 	*tokFiles = append(*tokFiles, token_file_path)
 	log.Printf("Token file name generated %v", tokFiles)

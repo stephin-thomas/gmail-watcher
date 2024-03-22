@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"path"
+
 	"path/filepath"
+	"strings"
 
 	"github.com/gen2brain/beeep"
 
@@ -111,7 +112,7 @@ func main() {
 			err := email_main(client_srv)
 			if err != nil {
 				retry = retry + 1
-				log.Println("Sleeping:-", 10*time.Second)
+				log.Println("Sleeping:- 10 sec")
 				beeep.Notify("Error", "Unable retrieve emails please check your internet connection", NOTIFICATION_ICON)
 				time.Sleep(10 * time.Second)
 				if retry == max_retries {
@@ -135,8 +136,11 @@ func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[
 		client := getClient(config, tokFile)
 		srv, err := get_gmail_serv(client, ctx)
 		email, err := get_email(srv)
-		db_file := fmt.Sprintf("id_db_%s.json", email.EmailAddress)
-		db := path.Join(*CONFIG_FOLDER, db_file)
+
+		db := strings.Replace(tokFile, "token_", "id_db_", -1)
+		// db = fmt.Sprintf("id_db_%s")
+		// db_file := fmt.Sprintf("id_db_%s.json", email.EmailAddress)
+		// db := path.Join(*CONFIG_FOLDER, db_file)
 		log.Println("Using DB at", db)
 		for err != nil {
 			return nil, err
@@ -194,7 +198,7 @@ func email_main(client_srv *clientService) error {
 				return err
 			}
 			if err == nil {
-				if max_shown < shown_index {
+				if max_shown > shown_index {
 					show_emails(msg, &client_srv.email_id)
 				}
 			} else {
