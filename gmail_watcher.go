@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"path/filepath"
 	"strings"
@@ -37,20 +38,29 @@ func (c clientService) update_msg(needle string) bool {
 }
 
 var CONFIG_FOLDER string = get_config_folder()
-
 var CREDENTIALS_FILE = filepath.Join(CONFIG_FOLDER, "credentials.json")
 var LOGIN_TOKENS_LIST_FILE = filepath.Join(CONFIG_FOLDER, "login_tokens.json")
 var PORT int64 = 5000
 var NOTIFICATION_ICON = filepath.Join(CONFIG_FOLDER, "assets/notification.png")
 
 func main() {
+	log_file_path := filepath.Join(CONFIG_FOLDER, "gmail-watcher.log")
+	logFile, err := os.OpenFile(log_file_path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer logFile.Close()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	// Redirect log output to the file
+	log.SetOutput(logFile)
+	log.Println("Config Folder:-", CONFIG_FOLDER)
 	args := os.Args
 	if len(args) < 2 {
 		args = append(args, "")
 	}
 	if args[1] == "--help" {
-		fmt.Println(" --login :- Add a gmail account (More than one account could be added this way)\n --help :- Show help")
+		fmt.Println(" --login :- Add a gmail account (More than one account could be added this way)\n --help :- Show help\n --list :- Show all emails")
 		return
 	}
 
@@ -88,28 +98,58 @@ func main() {
 		token_file_path := add_token(&tokFiles)
 		saveToken(*token_file_path, token)
 	}
+
 	max_retries := 3
 	var client_srvs []*clientService
-	for i := 0; i < max_retries; i++ {
-		client_srvs, err = collect_gmail_serv(config, &ctx, &tokFiles, &CONFIG_FOLDER)
-		if err == nil {
-			break
+	client_srvs, shouldReturn := handle_client_srvs(ctx, max_retries, client_srvs, err, config, tokFiles)
+	if shouldReturn {
+		return
+	}
+	if args[1] == "--list" {
+		var wg sync.WaitGroup
+		list_len := 15
+		mailMessage := make(chan string)
+		for _, client_srv := range client_srvs {
+			//log.Println("Serving", client_srv)
+			msgs, err := update_emails(client_srv, false)
+			if err != nil {
+				println("Error getting emails")
+				return
+			} else {
+				for index, msg := range msgs[:list_len] {
+					wg.Add(1)
+					go func(client_srv *clientService, msg *gmail.Message, index int) {
+						msg_mail, err := get_msg(client_srv.gmail_service, "me", msg.Id)
+						if err != nil {
+							fmt.Println("Error getting emails")
+						} else {
+							mailMessage <- msg_mail.Snippet
+						}
+						defer wg.Done()
+						return
+					}(client_srv, msg, index)
+
+				}
+
+			}
 		}
-	}
-	if err != nil {
-		log.Println("Couldn't construct any clients")
-		beeep.Notify("Fatal Error", "Couldn't construct any clients exiting", NOTIFICATION_ICON)
-	}
-	if len(client_srvs) == 0 {
-		log.Println("No clients found")
-		beeep.Notify("Fatal Error", "No clients found", NOTIFICATION_ICON)
+
+		// Launch a goroutine to close the channel after sending is done
+		go func() {
+			wg.Wait()                // Wait for all senders to finish
+			defer close(mailMessage) // Close the channel after all sends are complete
+		}()
+		for msg_c := range mailMessage {
+			fmt.Printf("%s\n", msg_c)
+		}
+		fmt.Println("-----")
 		return
 	}
 	for {
 		retry := 0
 		for _, client_srv := range client_srvs {
 			//log.Println("Serving", client_srv)
-			err := email_main(client_srv)
+			_, err := update_emails(client_srv, true)
 			if err != nil {
 				retry = retry + 1
 				log.Println("Sleeping:- 10 sec")
@@ -128,6 +168,26 @@ func main() {
 	}
 }
 
+func handle_client_srvs(ctx context.Context, max_retries int, client_srvs []*clientService, err error, config *oauth2.Config, tokFiles []string) ([]*clientService, bool) {
+	for i := 0; i < max_retries; i++ {
+		client_srvs, err = collect_gmail_serv(config, &ctx, &tokFiles, &CONFIG_FOLDER)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		log.Println("Couldn't construct any clients")
+		beeep.Notify("Fatal Error", "Couldn't construct any clients exiting", NOTIFICATION_ICON)
+		return nil, true
+	}
+	if len(client_srvs) == 0 {
+		log.Println("No clients found")
+		beeep.Notify("Fatal Error", "No clients found", NOTIFICATION_ICON)
+		return nil, true
+	}
+	return client_srvs, false
+}
+
 func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[]string, CONFIG_FOLDER *string) ([]*clientService, error) {
 	log.Println("Collecting Gmail Clients from configuration from tokens", tokFiles)
 	var gmail_services []*clientService
@@ -135,7 +195,7 @@ func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[
 	for _, tokFile := range *tokFiles {
 		client := getClient(config, tokFile)
 		srv, err := get_gmail_serv(client, ctx)
-		email, err := get_email(srv)
+		email, err := get_email_prof(srv)
 
 		db := strings.Replace(tokFile, "token_", "id_db_", -1)
 		// db = fmt.Sprintf("id_db_%s")
@@ -162,7 +222,7 @@ func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[
 	return gmail_services, nil
 }
 
-func get_email(gmail_service *gmail.Service) (*gmail.Profile, error) {
+func get_email_prof(gmail_service *gmail.Service) (*gmail.Profile, error) {
 	usr_name, err := gmail_service.Users.GetProfile("me").Do()
 
 	if err != nil {
@@ -178,11 +238,11 @@ func get_gmail_serv(client *http.Client, ctx *context.Context) (*gmail.Service, 
 
 }
 
-func email_main(client_srv *clientService) error {
+func update_emails(client_srv *clientService, notify bool) ([]*gmail.Message, error) {
 	user := "me"
 	msg_list, err := get_msg_ids(client_srv.gmail_service, user)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	//var updated_emails []string
 	log.Printf("Total msgs from google:- %d\n Using only:- 15", len(msg_list.Messages))
@@ -195,10 +255,10 @@ func email_main(client_srv *clientService) error {
 			shown_index = shown_index + 1
 			msg, err := get_msg(client_srv.gmail_service, user, msg.Id)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if err == nil {
-				if max_shown > shown_index {
+				if max_shown > shown_index && notify {
 					show_emails(msg, &client_srv.email_id)
 				}
 			} else {
@@ -212,7 +272,7 @@ func email_main(client_srv *clientService) error {
 			log.Fatalln("Error saving db database", client_srv.db, err)
 		}
 	}
-	return nil
+	return msgs, nil
 }
 
 func show_emails(msg *gmail.Message, user_email *string) {

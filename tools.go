@@ -15,7 +15,6 @@ import (
 
 func get_config_folder() string {
 	var CONFIG_FOLDER string = filepath.Join(xdg.ConfigHome, "gmail_watcher")
-	log.Println("Config Folder:-", CONFIG_FOLDER)
 	return CONFIG_FOLDER
 }
 
