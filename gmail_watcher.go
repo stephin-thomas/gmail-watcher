@@ -106,16 +106,17 @@ func main() {
 		return
 	}
 	if args[1] == "--list" {
-		var wg sync.WaitGroup
 		list_len := 15
-		mailMessage := make(chan string)
 		for _, client_srv := range client_srvs {
+			var wg sync.WaitGroup
+			mailMessage := make(chan string)
 			//log.Println("Serving", client_srv)
 			msgs, err := update_emails(client_srv, false)
 			if err != nil {
 				println("Error getting emails")
 				return
 			} else {
+				fmt.Printf("Email:- %s\n", client_srv.email_id)
 				for index, msg := range msgs[:list_len] {
 					wg.Add(1)
 					go func(client_srv *clientService, msg *gmail.Message, index int) {
@@ -132,17 +133,18 @@ func main() {
 				}
 
 			}
+
+			// Launch a goroutine to close the channel after sending is done
+			go func() {
+				wg.Wait()                // Wait for all senders to finish
+				defer close(mailMessage) // Close the channel after all sends are complete
+			}()
+			for msg_c := range mailMessage {
+				fmt.Printf("%s\n", msg_c)
+			}
+			fmt.Println("-----")
 		}
 
-		// Launch a goroutine to close the channel after sending is done
-		go func() {
-			wg.Wait()                // Wait for all senders to finish
-			defer close(mailMessage) // Close the channel after all sends are complete
-		}()
-		for msg_c := range mailMessage {
-			fmt.Printf("%s\n", msg_c)
-		}
-		fmt.Println("-----")
 		return
 	}
 	for {
