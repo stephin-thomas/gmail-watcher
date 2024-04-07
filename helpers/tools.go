@@ -1,4 +1,4 @@
-package main
+package helpers
 
 import (
 	"errors"
@@ -25,25 +25,6 @@ func add_random_token_path(tokFiles *[]string) *string {
 	log.Printf("Token file name generated %v", tokFiles)
 	return &token_file_path
 }
-
-// func list_difference(new *map[string]struct{}, old *map[string]struct{}) *map[string]struct{} {
-// 	diff := map[string]struct{}{}
-// 	max_try := 3
-// 	try := 1
-// 	for new_id := range *new {
-// 		if check_if_value_present(new_id, old) {
-// 			if try == max_try {
-// 				return &diff
-// 			}
-// 			try += 1
-// 		} else {
-// 			diff[new_id] = struct{}{}
-// 			// diff = append(diff, new_id)
-// 		}
-// 	}
-// 	// defer fmt.Println("Difference is", diff)
-// 	return &diff
-// }
 
 func create_id_list(records *[]*gmail.Message) *map[string]struct{} {
 	id_list := map[string]struct{}{}

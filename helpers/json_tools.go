@@ -1,8 +1,9 @@
-package main
+package helpers
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/stephin-thomas/gmail-watcher"
 	"io/fs"
 	"log"
 	"os"
@@ -16,7 +17,7 @@ func change_server_port(creds *oauth2.Config, port int64) {
 	server_url := fmt.Sprintf("http://localhost:%d", port)
 	if creds.RedirectURL != server_url {
 		creds.RedirectURL = server_url
-		serialize_n_save(*creds, CREDENTIALS_FILE)
+		serialize_n_save(*creds, main.CREDENTIALS_FILE)
 	}
 }
 

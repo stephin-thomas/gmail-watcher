@@ -1,14 +1,15 @@
-package main
+package gmail_client
 
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/browser"
-	"golang.org/x/oauth2"
 	"io"
 	"log"
 	"net/http"
 	"sync"
+
+	"github.com/pkg/browser"
+	"golang.org/x/oauth2"
 )
 
 // Retrieve a token, saves the token, then returns the generated client.
