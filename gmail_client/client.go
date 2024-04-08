@@ -8,24 +8,26 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/gmail-watcher/helpers"
+	"github.com/gmail-watcher/paths"
 	"github.com/pkg/browser"
 	"golang.org/x/oauth2"
 )
 
 // Retrieve a token, saves the token, then returns the generated client.
-func getClient(config *oauth2.Config, tokFile string) *http.Client {
+func GetClient(config *oauth2.Config, tokFile string) *http.Client {
 	log.Println("Creating Client")
-	tok, err := tokenFromFile(tokFile)
+	tok, err := helpers.TokenFromFile(tokFile)
 	if err != nil {
 		log.Println("Error creating client for token file\n", err, "\nGetting new file")
-		tok = getTokenFromWeb(config)
-		saveToken(tokFile, tok)
+		tok = GetTokenFromWeb(config)
+		helpers.SaveToken(tokFile, tok)
 	}
 	return config.Client(context.Background(), tok)
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
+func GetTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	channel := make(chan string, 1)
 	wg := &sync.WaitGroup{}
 	log.Printf("Getting Token From Web")
@@ -54,7 +56,7 @@ func handle_connection(wg *sync.WaitGroup, c *chan string) *http.Server {
 		io.WriteString(w, "Your Gmail Authenticated you could close the browser now!\n")
 		defer wg.Done() // let main know we are done
 	}
-	srv := &http.Server{Addr: fmt.Sprintf(":%d", PORT),
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", paths.PORT),
 		Handler: http.HandlerFunc(tokenHandler),
 	}
 	go start_server(srv)

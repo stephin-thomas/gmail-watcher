@@ -3,22 +3,18 @@ package helpers
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
 
-	"github.com/adrg/xdg"
+	. "github.com/gmail-watcher/paths"
 	"github.com/google/uuid"
 	"google.golang.org/api/gmail/v1"
 )
 
-func get_config_folder() string {
-	var CONFIG_FOLDER string = filepath.Join(xdg.ConfigHome, "gmail_watcher")
-	return CONFIG_FOLDER
-}
-
-func add_random_token_path(tokFiles *[]string) *string {
+func Add_random_token_path(tokFiles *[]string) *string {
 	token_file_name := fmt.Sprintf("token_%s.json", uuid.NewString())
 	token_file_path := path.Join(CONFIG_FOLDER, token_file_name)
 	*tokFiles = append(*tokFiles, token_file_path)
@@ -26,7 +22,7 @@ func add_random_token_path(tokFiles *[]string) *string {
 	return &token_file_path
 }
 
-func create_id_list(records *[]*gmail.Message) *map[string]struct{} {
+func Create_id_list(records *[]*gmail.Message) *map[string]struct{} {
 	id_list := map[string]struct{}{}
 	for _, msg := range *records {
 		id_list[msg.Id] = struct{}{}
@@ -35,15 +31,24 @@ func create_id_list(records *[]*gmail.Message) *map[string]struct{} {
 	return &id_list
 }
 
-func add_token(tokFiles *[]string) *string {
+func Add_token(tokFiles *[]string) *string {
 	log.Println("Adding new token")
-	tok_file_name := add_random_token_path(tokFiles)
+	tok_file_name := Add_random_token_path(tokFiles)
 	log.Println("Added random token file to:-", tok_file_name)
-	serialize_n_save(tokFiles, LOGIN_TOKENS_LIST_FILE)
+	Serialize_n_save(tokFiles, LOGIN_TOKENS_LIST_FILE)
 	return tok_file_name
 }
 
-func copy_asset(sourceFile string, destinationFile string) {
+func Create_folder(path string) {
+	_, err := os.Stat(path)
+	if err != nil {
+		err := os.Mkdir(path, fs.ModePerm)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+	}
+}
+func Copy_asset(sourceFile string, destinationFile string) {
 	input, err1 := os.ReadFile(sourceFile)
 	err2 := os.MkdirAll(filepath.Dir(destinationFile), os.ModePerm)
 	if _, err := os.Stat(destinationFile); os.IsNotExist(err) {
