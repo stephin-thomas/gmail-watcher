@@ -2,21 +2,16 @@ package daemon
 
 import (
 	"context"
-	"strings"
 
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/coreos/go-systemd/daemon"
 
 	"github.com/gen2brain/beeep"
 	"github.com/gmail-watcher/gmail_client"
-	"github.com/gmail-watcher/helpers"
 	"github.com/gmail-watcher/paths"
 	"golang.org/x/oauth2"
-	"google.golang.org/api/gmail/v1"
-	"google.golang.org/api/option"
 )
 
 func Run(max_retries uint8, client_srvs []*gmail_client.ClientService) {
@@ -26,7 +21,7 @@ func Run(max_retries uint8, client_srvs []*gmail_client.ClientService) {
 		var retry uint8 = 0
 		for _, client_srv := range client_srvs {
 			//log.Println("Serving", client_srv)
-			_, err := client_srv.Run(true)
+			err := client_srv.Update(true)
 			if err != nil {
 				retry = retry + 1
 				log.Println("Sleeping:- 10 sec")
@@ -51,7 +46,7 @@ func Run(max_retries uint8, client_srvs []*gmail_client.ClientService) {
 func Handle_client_srvs(ctx context.Context, max_retries uint8, client_srvs []*gmail_client.ClientService, err error, config *oauth2.Config, tokFiles []string) ([]*gmail_client.ClientService, bool) {
 	var i uint8
 	for i = 0; i < max_retries; i++ {
-		client_srvs, err = collect_gmail_serv(config, &ctx, &tokFiles, &paths.CONFIG_FOLDER)
+		client_srvs, err = gmail_client.CollectGmailServ(config, &ctx, &tokFiles, &paths.CONFIG_FOLDER)
 		if err == nil {
 			break
 		}
@@ -67,54 +62,4 @@ func Handle_client_srvs(ctx context.Context, max_retries uint8, client_srvs []*g
 		return nil, true
 	}
 	return client_srvs, false
-}
-
-func collect_gmail_serv(config *oauth2.Config, ctx *context.Context, tokFiles *[]string, CONFIG_FOLDER *string) ([]*gmail_client.ClientService, error) {
-	log.Println("Collecting Gmail Clients from configuration from tokens", tokFiles)
-	var gmail_services []*gmail_client.ClientService
-
-	for _, tokFile := range *tokFiles {
-		client := gmail_client.GetClient(config, tokFile)
-		srv, err := get_gmail_serv(client, ctx)
-		email, err := get_email_prof(srv)
-
-		db := strings.Replace(tokFile, "token_", "id_db_", -1)
-		// db = fmt.Sprintf("id_db_%s")
-		// db_file := fmt.Sprintf("id_db_%s.json", email.EmailAddress)
-		// db := path.Join(*CONFIG_FOLDER, db_file)
-		log.Println("Using DB at", db)
-		for err != nil {
-			return nil, err
-		}
-		id_db, err := helpers.Load_old_msg_ids(db)
-		if err != nil {
-			id_db = make(map[string]struct{})
-		}
-		client_service := gmail_client.ClientService{
-			GmailService: srv,
-			ID_DB:        &id_db,
-			DB:           db,
-			EmailID:      email.EmailAddress,
-		}
-		log.Println("Successfully created client")
-		gmail_services = append(gmail_services, &client_service)
-		//get_email(&client_service)
-	}
-	return gmail_services, nil
-}
-
-func get_email_prof(gmail_service *gmail.Service) (*gmail.Profile, error) {
-	usr_name, err := gmail_service.Users.GetProfile("me").Do()
-
-	if err != nil {
-		log.Fatal("Error getting email profile")
-
-	}
-	return usr_name, err
-}
-
-func get_gmail_serv(client *http.Client, ctx *context.Context) (*gmail.Service, error) {
-	srv, err := gmail.NewService(*ctx, option.WithHTTPClient(client))
-	return srv, err
-
 }

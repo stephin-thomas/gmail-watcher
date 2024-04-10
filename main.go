@@ -80,13 +80,14 @@ func main() {
 			var wg sync.WaitGroup
 			mailMessage := make(chan string)
 			//log.Println("Serving", client_srv)
-			msgs, err := client_srv.Run(false)
+			// msgs, err := client_srv.Update(false)
+			msgs, err := client_srv.GetMsgIDs()
 			if err != nil {
 				println("Error getting emails")
 				return
 			} else {
 				fmt.Printf("Email:- %s\n", client_srv.EmailID)
-				for index, msg := range msgs[:list_len] {
+				for index, msg := range msgs.Messages[:list_len] {
 					wg.Add(1)
 					go func(client_srv *gmail_client.ClientService, msg *gmail.Message, index int) {
 						msg_mail, err := client_srv.GetMsg("me", msg.Id)
