@@ -2,14 +2,11 @@ package gmail_client
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 
-	"github.com/gen2brain/beeep"
 	"github.com/gmail-watcher/helpers"
-	"github.com/gmail-watcher/paths"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
@@ -21,8 +18,12 @@ type ClientService struct {
 	DB_Path      string
 	ID_DB        map[string]struct{}
 }
+type MailClient interface {
+	Save() error
+	Update() error
+}
 
-func (c *ClientService) save() error {
+func (c *ClientService) Save() error {
 	err := helpers.Serialize_n_save(c.ID_DB, c.DB_Path)
 	return err
 }
@@ -50,24 +51,17 @@ func (client_srv *ClientService) Update(notify bool) error {
 			return err
 		}
 		if max_shown > shown_index && notify {
-			NotifyEmail(msg, &client_srv.EmailID)
+			helpers.NotifyEmail(&msg.Snippet, &client_srv.EmailID)
 		}
 		// }
 	}
 	if shown_index > 0 {
-		err := client_srv.save()
+		err := client_srv.Save()
 		if err != nil {
 			log.Fatalln("Error saving db database", client_srv.DB_Path, err)
 		}
 	}
 	return nil
-}
-
-func NotifyEmail(msg *gmail.Message, user_email *string) {
-	err := beeep.Notify(fmt.Sprintf("Gmail Watcher:-%s", *user_email), msg.Snippet, paths.NOTIFICATION_ICON)
-	if err != nil {
-		log.Println("Error during notification", err)
-	}
 }
 
 func (c *ClientService) GetMsgIDs() (*gmail.ListMessagesResponse, error) {
@@ -107,14 +101,30 @@ func (c *ClientService) GetMsg(user string, msg_id string) (*gmail.Message, erro
 	return msg, err
 
 }
+
+func GetEmailProfile(gmail_service *gmail.Service) (*gmail.Profile, error) {
+	usr_name, err := gmail_service.Users.GetProfile("me").Do()
+
+	if err != nil {
+		log.Fatal("Error getting email profile")
+
+	}
+	return usr_name, err
+}
+
+func GetGmailServ(client *http.Client, ctx *context.Context) (*gmail.Service, error) {
+	srv, err := gmail.NewService(*ctx, option.WithHTTPClient(client))
+	return srv, err
+
+}
 func CollectGmailServ(config *oauth2.Config, ctx *context.Context, tokFiles *[]string, CONFIG_FOLDER *string) ([]*ClientService, error) {
 	log.Println("Collecting Gmail Clients from configuration from tokens", tokFiles)
 	var gmail_services []*ClientService
 
 	for _, tokFile := range *tokFiles {
 		client := GetClient(config, tokFile)
-		srv, err := get_gmail_serv(client, ctx)
-		email, err := get_email_prof(srv)
+		srv, err := GetGmailServ(client, ctx)
+		email, err := GetEmailProfile(srv)
 
 		db_path := strings.Replace(tokFile, "token_", "id_db_", -1)
 		// db = fmt.Sprintf("id_db_%s")
@@ -139,20 +149,4 @@ func CollectGmailServ(config *oauth2.Config, ctx *context.Context, tokFiles *[]s
 		//get_email(&client_service)
 	}
 	return gmail_services, nil
-}
-
-func get_email_prof(gmail_service *gmail.Service) (*gmail.Profile, error) {
-	usr_name, err := gmail_service.Users.GetProfile("me").Do()
-
-	if err != nil {
-		log.Fatal("Error getting email profile")
-
-	}
-	return usr_name, err
-}
-
-func get_gmail_serv(client *http.Client, ctx *context.Context) (*gmail.Service, error) {
-	srv, err := gmail.NewService(*ctx, option.WithHTTPClient(client))
-	return srv, err
-
 }

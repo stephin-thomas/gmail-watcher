@@ -9,14 +9,15 @@ import (
 	"path"
 	"path/filepath"
 
-	. "github.com/gmail-watcher/paths"
+	"github.com/gen2brain/beeep"
+	"github.com/gmail-watcher/paths"
 	"github.com/google/uuid"
 	"google.golang.org/api/gmail/v1"
 )
 
 func Add_random_token_path(tokFiles *[]string) *string {
 	token_file_name := fmt.Sprintf("token_%s.json", uuid.NewString())
-	token_file_path := path.Join(CONFIG_FOLDER, token_file_name)
+	token_file_path := path.Join(paths.CONFIG_FOLDER, token_file_name)
 	*tokFiles = append(*tokFiles, token_file_path)
 	log.Printf("Token file name generated %v", tokFiles)
 	return &token_file_path
@@ -35,7 +36,7 @@ func Add_token(tokFiles *[]string) *string {
 	log.Println("Adding new token")
 	tok_file_name := Add_random_token_path(tokFiles)
 	log.Println("Added random token file to:-", tok_file_name)
-	Serialize_n_save(tokFiles, LOGIN_TOKENS_LIST_FILE)
+	Serialize_n_save(tokFiles, paths.LOGIN_TOKENS_LIST_FILE)
 	return tok_file_name
 }
 
@@ -70,4 +71,10 @@ func Copy_asset(sourceFile string, destinationFile string) {
 		// Additional error handling logic can be added here
 	}
 
+}
+func NotifyEmail(msg *string, user_email *string) {
+	err := beeep.Notify(fmt.Sprintf("Gmail Watcher:-%s", *user_email), *msg, paths.NOTIFICATION_ICON)
+	if err != nil {
+		log.Println("Error during notification", err)
+	}
 }
