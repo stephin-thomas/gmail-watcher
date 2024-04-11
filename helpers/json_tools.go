@@ -1,26 +1,26 @@
-package main
+package helpers
 
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 
 	"time"
 
+	"github.com/gmail-watcher/paths"
 	"golang.org/x/oauth2"
 )
 
-func change_server_port(creds *oauth2.Config, port int64) {
+func Change_server_port(creds *oauth2.Config, port int64) {
 	server_url := fmt.Sprintf("http://localhost:%d", port)
 	if creds.RedirectURL != server_url {
 		creds.RedirectURL = server_url
-		serialize_n_save(*creds, CREDENTIALS_FILE)
+		Serialize_n_save(*creds, paths.CREDENTIALS_FILE)
 	}
 }
 
-func load_old_msg_ids(file_name string) (map[string]struct{}, error) {
+func Load_old_msg_ids(file_name string) (map[string]struct{}, error) {
 	var id_list map[string]struct{}
 	json_file, err := os.ReadFile(file_name)
 	if err != nil {
@@ -31,9 +31,9 @@ func load_old_msg_ids(file_name string) (map[string]struct{}, error) {
 
 }
 
-func load_existing_tokens() ([]string, error) {
+func Load_existing_tokens() ([]string, error) {
 	var tok_list []string
-	json_file, err := os.ReadFile(LOGIN_TOKENS_LIST_FILE)
+	json_file, err := os.ReadFile(paths.LOGIN_TOKENS_LIST_FILE)
 	if err != nil {
 		return nil, err
 	} else {
@@ -42,12 +42,7 @@ func load_existing_tokens() ([]string, error) {
 	}
 }
 
-func (c clientService) save() error {
-	err := serialize_n_save(c.id_db, c.db)
-	return err
-}
-
-func serialize_n_save(json_unser any, file_name string) error {
+func Serialize_n_save(json_unser any, file_name string) error {
 	json_b, err := json.Marshal(json_unser)
 	if err != nil {
 		return err
@@ -57,18 +52,8 @@ func serialize_n_save(json_unser any, file_name string) error {
 	return err
 }
 
-func create_folder(path string) {
-	_, err := os.Stat(path)
-	if err != nil {
-		err := os.Mkdir(path, fs.ModePerm)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-	}
-}
-
 // Saves a token to a file path.
-func saveToken(path string, token *oauth2.Token) {
+func SaveToken(path string, token *oauth2.Token) {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
@@ -88,7 +73,7 @@ func token_expired(token_expiry *time.Time) bool {
 }
 
 // Retrieves a token from a local file.
-func tokenFromFile(file string) (*oauth2.Token, error) {
+func TokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
