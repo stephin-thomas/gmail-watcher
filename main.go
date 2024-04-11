@@ -44,9 +44,10 @@ func main() {
 	// If modifying these scopes, delete your previously saved token.json.
 	config, err := google.ConfigFromJSON(config_json, gmail.GmailReadonlyScope)
 	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v\n Follow the steps 'Enable the API' and 'Authorize credentials for a desktop application' from the following page\n https://developers.google.com/gmail/api/quickstart/go \n Note:- Ignore all other steps\n rename the downloaded file to credentials.json and copy it to\n~/.config/gmail_watcher", err)
+		fmt.Printf("Unable to read client secret file: %v\n Follow the steps 'Enable the API' and 'Authorize credentials for a desktop application' from the following page\n https://developers.google.com/gmail/api/quickstart/go \n Note:- Ignore all other steps\n rename the downloaded file to credentials.json and copy it to\n~/.config/gmail_watcher", err)
+		panic("No client secret file")
 	}
-	helpers.Change_server_port(config, paths.PORT)
+	err = gmail_client.Change_server_port(config, paths.PORT)
 
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
@@ -54,23 +55,28 @@ func main() {
 
 	var tokFiles []string
 
-	tokFiles, err = helpers.Load_existing_tokens()
+	tokFiles, err = helpers.Load_json_list(paths.LOGIN_TOKENS_LIST_FILE)
 	if err != nil {
 		tokFiles = make([]string, 0)
 	}
 
 	if args[1] == "--login" || len(tokFiles) == 0 {
 		if len(tokFiles) == 0 && args[1] != "--login" {
-			fmt.Println("No saved accounts found Log in")
+			// fmt.Println("No saved accounts found Log in")
+			log.Println("No saved accounts found Log in")
 		}
 		token := gmail_client.GetTokenFromWeb(config)
-		token_file_path := helpers.Add_token(&tokFiles)
+		token_file_path, err := gmail_client.Add_token(&tokFiles)
+		if err != nil {
+			fmt.Printf("Error Occured")
+			log.Printf("Error adding token :- %v", err)
+		}
 		helpers.SaveToken(*token_file_path, token)
 	}
 
 	var max_retries uint8 = 3
 	var client_srvs []*gmail_client.ClientService
-	client_srvs, shouldReturn := daemon.Handle_client_srvs(ctx, max_retries, client_srvs, err, config, tokFiles)
+	client_srvs, shouldReturn := daemon.GetClientSrvs(ctx, max_retries, client_srvs, err, config, tokFiles)
 	if shouldReturn {
 		return
 	}
@@ -83,7 +89,8 @@ func main() {
 			// msgs, err := client_srv.Update(false)
 			msgs, err := client_srv.GetMsgIDs()
 			if err != nil {
-				println("Error getting emails")
+				fmt.Println("Error getting emails msg ids")
+				log.Fatalf("Error getting emails msg ids:- %v", err)
 				return
 			} else {
 				fmt.Printf("Email:- %s\n", client_srv.EmailID)
@@ -92,7 +99,8 @@ func main() {
 					go func(client_srv *gmail_client.ClientService, msg *gmail.Message, index int) {
 						msg_mail, err := client_srv.GetMsg("me", msg.Id)
 						if err != nil {
-							fmt.Println("Error getting emails")
+							log.Printf("Error getting emails:- %v", err)
+							fmt.Print("Error getting emails")
 						} else {
 							mailMessage <- msg_mail.Snippet
 						}
