@@ -1,4 +1,4 @@
-package daemon
+package gmail_client
 
 import (
 	"context"
@@ -9,13 +9,12 @@ import (
 	"github.com/coreos/go-systemd/daemon"
 
 	"github.com/gen2brain/beeep"
-	"github.com/gmail-watcher/gmail_client"
-	"github.com/gmail-watcher/helpers"
+	"github.com/gmail-watcher/io_helpers"
 	"github.com/gmail-watcher/paths"
 	"golang.org/x/oauth2"
 )
 
-func Run(max_retries uint8, client_srvs []*gmail_client.ClientService) {
+func RunDaemon(max_retries uint8, client_srvs []*GmailService) {
 	daemon.SdNotify(true, daemon.SdNotifyReady)
 	shutdown := false
 	for !shutdown {
@@ -39,7 +38,7 @@ func Run(max_retries uint8, client_srvs []*gmail_client.ClientService) {
 					log.Printf("Error getting email with id %v:- %v", *msg_id, err2)
 				}
 				if max_shown > shown_index {
-					helpers.Notify(&msg.Snippet, &client_srv.EmailID)
+					io_helpers.Notify(&msg.Snippet, &client_srv.EmailID)
 				}
 				// }
 			}
@@ -50,13 +49,13 @@ func Run(max_retries uint8, client_srvs []*gmail_client.ClientService) {
 				if retry == 1 {
 					err_msg := "Unable retrieve emails please check your internet connection"
 					err_title := "Error"
-					helpers.Notify(&err_msg, &err_title)
+					io_helpers.Notify(&err_msg, &err_title)
 				}
 				time.Sleep(10 * time.Second)
 				if retry == max_retries {
 					err_msg := "Shutting down Gmail Watcher due to errors"
 					err_title := "Error"
-					helpers.Notify(&err_msg, &err_title)
+					io_helpers.Notify(&err_msg, &err_title)
 					shutdown = true
 				}
 				break
@@ -78,10 +77,12 @@ func Run(max_retries uint8, client_srvs []*gmail_client.ClientService) {
 	daemon.SdNotify(true, daemon.SdNotifyStopping)
 }
 
-func GetClientSrvs(ctx context.Context, max_retries uint8, client_srvs []*gmail_client.ClientService, err error, config *oauth2.Config, tokFiles []string) ([]*gmail_client.ClientService, bool) {
+func GetClientSrvs(ctx context.Context, max_retries uint8, config *oauth2.Config, tokFiles []string) ([]*GmailService, bool) {
 	var i uint8
+	var client_srvs []*GmailService
+	var err error
 	for i = 0; i < max_retries; i++ {
-		client_srvs, err = gmail_client.CollectGmailServ(config, &ctx, &tokFiles, &paths.CONFIG_FOLDER)
+		client_srvs, err = CollectGmailServ(config, &ctx, &tokFiles, &paths.CONFIG_FOLDER)
 		if err == nil {
 			break
 		}
