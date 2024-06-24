@@ -9,9 +9,9 @@ import (
 	"github.com/coreos/go-systemd/daemon"
 
 	"github.com/gen2brain/beeep"
+	"github.com/gmail-watcher/common"
 	"github.com/gmail-watcher/io_helpers"
 	"github.com/gmail-watcher/paths"
-	"golang.org/x/oauth2"
 )
 
 func RunDaemon(max_retries uint8, client_srvs []*GmailService) {
@@ -77,12 +77,12 @@ func RunDaemon(max_retries uint8, client_srvs []*GmailService) {
 	daemon.SdNotify(true, daemon.SdNotifyStopping)
 }
 
-func GetClientSrvs(ctx context.Context, max_retries uint8, config *oauth2.Config, tokFiles []string) ([]*GmailService, bool) {
+func GetClientSrvs(clients []*common.LocalClient, ctx context.Context, max_retries uint8) ([]*GmailService, bool) {
 	var i uint8
 	var client_srvs []*GmailService
 	var err error
 	for i = 0; i < max_retries; i++ {
-		client_srvs, err = CollectGmailServ(config, &ctx, &tokFiles, &paths.CONFIG_FOLDER)
+		client_srvs, err = CollectGmailServ(clients, &ctx, &paths.CONFIG_FOLDER)
 		if err == nil {
 			break
 		}

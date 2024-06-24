@@ -1,7 +1,9 @@
 package main
 
 var CLI struct {
-	Login struct{} `cmd:"" help:"Login to google"`
+	Login struct {
+		AuthPort uint64 `default:"3000" help: "Redirect port url after authentication"`
+	} `cmd:"" help:"Login to google"`
 	Gmail struct {
 		MaxRetries uint8 `default:"3" help: "Max retries to connect to server"`
 		List       struct {
@@ -9,5 +11,7 @@ var CLI struct {
 		} `cmd:"" help:"List all retrieved email"`
 		Daemon struct{} `cmd:"" help:"Run a gmail notification daemon"`
 	} `cmd:"" help:"gmail"`
-	Cal struct{} `cmd:"" help:"Show calendar events"`
+	Cal struct {
+		MaxResults int64 `default:"10" help: "Max Events should be shown from each calendar"`
+	} `cmd:"" help:"Show calendar events"`
 }

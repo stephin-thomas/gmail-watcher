@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path"
 	"time"
@@ -15,7 +16,7 @@ import (
 	"google.golang.org/api/gmail/v1"
 )
 
-func Add_random_token_path(tokFiles *[]string) *string {
+func AddRandomTokenPath(tokFiles *[]string) *string {
 	token_file_name := fmt.Sprintf("token_%s.json", uuid.NewString())
 	token_file_path := path.Join(paths.CONFIG_FOLDER, token_file_name)
 	*tokFiles = append(*tokFiles, token_file_path)
@@ -32,22 +33,36 @@ func CreateIDList(records *[]*gmail.Message) *map[string]struct{} {
 	return &id_list
 }
 
-func Add_token(tokFiles *[]string) (*string, error) {
+func AddToken(tokFiles *[]string) (*string, error) {
 	log.Println("Adding new token")
-	tok_file_name := Add_random_token_path(tokFiles)
-	log.Println("Added random token file to:-", tok_file_name)
-	err := io_helpers.Serialize_n_save(tokFiles, paths.LOGIN_TOKENS_LIST_FILE)
+	tok_file_name := AddRandomTokenPath(tokFiles)
+	log.Println("Added token file to:-", tok_file_name)
+	err := io_helpers.SerializeNsave(tokFiles, paths.LOGIN_TOKENS_LIST_FILE)
 	if err != nil {
 		return nil, fmt.Errorf("Error adding tokens:- %w", err)
 	}
 	return tok_file_name, nil
 }
-func Change_server_port(creds *oauth2.Config, port int64) error {
-	server_url := fmt.Sprintf("http://localhost:%d", port)
-	if creds.RedirectURL != server_url {
-		creds.RedirectURL = server_url
-		err := io_helpers.Serialize_n_save(*creds, paths.CREDENTIALS_FILE)
-		return fmt.Errorf("Error changing server port:- %w", err)
+
+func ChangeServerPort(config *oauth2.Config, port uint64) error {
+	finalURl, err := url.Parse(config.RedirectURL)
+	if err != nil {
+		log.Fatalf("Error parsing redirect url from config. try again.\n%s\n", config.RedirectURL)
+	}
+	scheme := finalURl.Scheme
+	config_host := finalURl.Hostname()
+	config_port := finalURl.Port()
+	req_port := fmt.Sprintf("%d", port)
+	if config_port != req_port {
+		config.RedirectURL = fmt.Sprintf("%s://%s:%d", scheme, config_host, port)
+		log.Printf("Redirect url set as %s", config.RedirectURL)
+		if err != nil {
+			return fmt.Errorf("Error replacing port in the config %s", err)
+		}
+		// err := io_helpers.SerializeNsave(*creds, paths.CREDENTIALS_FILE)
+		// if err != nil {
+		// 	return fmt.Errorf("Error serializing and saving the newly generated json %s", err)
+		// }
 	}
 	return nil
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/gmail-watcher/paths"
 )
 
-func Create_folder(path string) {
+func CreateFolder(path string) {
 	_, err := os.Stat(path)
 	if err != nil {
 		err := os.Mkdir(path, fs.ModePerm)
@@ -21,7 +21,7 @@ func Create_folder(path string) {
 		}
 	}
 }
-func Copy_asset(sourceFile string, destinationFile string) {
+func CopyAssets(sourceFile string, destinationFile string) {
 	input, err1 := os.ReadFile(sourceFile)
 	err2 := os.MkdirAll(filepath.Dir(destinationFile), os.ModePerm)
 	if _, err := os.Stat(destinationFile); os.IsNotExist(err) {
