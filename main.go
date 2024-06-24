@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"google.golang.org/api/calendar/v3"
 	"log"
 	"os"
 	"sync"
 
 	"github.com/alecthomas/kong"
-	"github.com/gmail-watcher/calendar"
 	"github.com/gmail-watcher/common"
+	"github.com/gmail-watcher/gcalendar"
 	"github.com/gmail-watcher/gmail_client"
 	"github.com/gmail-watcher/io_helpers"
 	"github.com/gmail-watcher/paths"
@@ -38,37 +39,46 @@ func main() {
 	io_helpers.CopyAssets(paths.ASSETS_SOURCE_PATH, paths.ASSETS_PATH)
 	ctx := context.Background()
 	config_json, err := os.ReadFile(paths.CREDENTIALS_FILE)
+	if err != nil {
+		log.Fatalf("Error reading credentials.json file \n%s", err)
+	}
 	// If modifying these scopes, delete your previously saved token.json.
-	config, err := google.ConfigFromJSON(config_json, gmail.GmailReadonlyScope)
+	config, err := google.ConfigFromJSON(config_json, gmail.GmailReadonlyScope, calendar.CalendarReadonlyScope)
 	if err != nil {
-		fmt.Printf("Unable to read client secret file: %v\n Follow the steps 'Enable the API' and 'Authorize credentials for a desktop application' from the following page\n https://developers.google.com/gmail/api/quickstart/go \n Note:- Ignore all other steps\n rename the downloaded file to credentials.json and copy it to\n~/.config/gmail_watcher", err)
-		panic("No client secret file")
-	}
-	err = gmail_client.ChangeServerPort(config, paths.PORT)
-
-	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
+		fmt.Printf("Unable parse secret file:\n Follow the steps 'Enable the API' and 'Authorize credentials for a desktop application' from the following page\n https://developers.google.com/gmail/api/quickstart/go \n Note:- Ignore all other steps\n rename the downloaded file to credentials.json and copy it to ~/.config/gmail_watcher\n")
+		fmt.Printf("Make sure gmail readonlyscope and calendar readonly scope is available for the account\n%s", err)
+		log.Fatalf("%v:\nUnable to parse client secret file to config or obtain permissions\n", err)
 	}
 
+	var clients []*common.LocalClient
+	//if tokfiles exist load that and add the new token on login. Or use the pre-existing token files to access the apis
 	tokFiles, err := io_helpers.LoadJsonList(paths.LOGIN_TOKENS_LIST_FILE)
+	log.Printf("%d token files found\n", len(tokFiles))
 	if err != nil {
-		// tokFiles = make([]string, 0)
+		tokFiles = make([]string, 0)
 		log.Fatalln("Error getting token files, Please try logging in")
 	}
-	clients := make([]*common.LocalClient, 0, len(tokFiles))
-	// var clients []*common.LocalClient
-	for _, tk := range tokFiles {
-		client := common.CreateClient(config, tk)
-		clients = append(clients, &client)
-	}
-	if len(clients) == 0 {
-		log.Fatalln("Error generating clients, No clients found")
+	clients = make([]*common.LocalClient, 0, len(tokFiles))
+	if cli_ctx.Command() != "login" {
+		// var clients []*common.LocalClient
+		for _, tk := range tokFiles {
+			client := common.CreateClient(config, tk)
+			clients = append(clients, &client)
+		}
+		if len(clients) == 0 {
+			log.Fatalln("Error generating clients, No clients found")
+		}
+
 	}
 	// var max_retries uint8 = 3
 	max_retries := CLI.Gmail.MaxRetries
 	switch cli_ctx.Command() {
 	case "login":
 		{
+			err = gmail_client.ChangeServerPort(config, CLI.Login.AuthPort)
+			if err != nil {
+				log.Printf("Error changing server port\n%s", err)
+			}
 			token := common.GetTokenFromWeb(config)
 			token_file_path, err := gmail_client.AddToken(&tokFiles)
 			if err != nil {
@@ -90,31 +100,10 @@ func main() {
 			for _, client_srv := range gmailSrvs {
 				var wg sync.WaitGroup
 				mailMessage := make(chan string)
-				msgs, err := client_srv.GetMsgIDs()
+				err = gmail_client.BroadcastEmails(client_srv, list_len, &wg, mailMessage)
 				if err != nil {
-					fmt.Println("Error getting emails msg ids")
-					log.Fatalf("Error getting emails msg ids:- %v", err)
 					return
-				} else {
-					fmt.Printf("Email:- %s\n", client_srv.EmailID)
-					for index, msg := range msgs.Messages[:list_len] {
-						wg.Add(1)
-						go func(client_srv *gmail_client.GmailService, msg *gmail.Message, index int) {
-							msg_mail, err := client_srv.GetMsg("me", msg.Id)
-							if err != nil {
-								log.Printf("Error getting emails:- %v", err)
-								fmt.Print("Error getting emails")
-							} else {
-								mailMessage <- msg_mail.Snippet
-							}
-							defer wg.Done()
-							return
-						}(client_srv, msg, index)
-
-					}
-
 				}
-
 				// Launch a goroutine to close the channel after sending is done
 				go func() {
 					wg.Wait()                // Wait for all senders to finish
@@ -140,14 +129,13 @@ func main() {
 		panic(cli_ctx.Command())
 	case "cal":
 		{
-
 			// calendar_services := make([]string, len(clients))
 			for _, client := range clients {
 				cal_srv, err := client.GetCalSrv(&ctx)
 				if err != nil {
 					return
 				}
-				calendar.GetEvents(cal_srv)
+				gcalendar.GetEvents(cal_srv, CLI.Cal.MaxResults)
 			}
 		}
 	}

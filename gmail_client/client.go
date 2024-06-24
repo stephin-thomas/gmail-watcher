@@ -1,7 +1,9 @@
 package gmail_client
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 
 	"context"
 	"log"
@@ -102,4 +104,29 @@ func CollectGmailServ(clients []*common.LocalClient, ctx *context.Context, CONFI
 		gmail_services = append(gmail_services, &client_service)
 	}
 	return gmail_services, nil
+}
+func BroadcastEmails(client_srv *GmailService, list_len uint8, wg *sync.WaitGroup, mailMessage chan string) error {
+	msgs, err := client_srv.GetMsgIDs()
+	if err != nil {
+		fmt.Println("Error getting emails msg ids")
+		log.Printf("Error getting emails msg ids:- %v", err)
+		return err
+	} else {
+		fmt.Printf("Email:- %s\n", client_srv.EmailID)
+		for index, msg := range msgs.Messages[:list_len] {
+			wg.Add(1)
+			go func(client_srv *GmailService, msg *gmail.Message, index int) {
+				msg_mail, err := client_srv.GetMsg("me", msg.Id)
+				if err != nil {
+					log.Printf("Error getting emails:- %v", err)
+					fmt.Print("Error getting emails")
+				} else {
+					mailMessage <- msg_mail.Snippet
+				}
+				defer wg.Done()
+			}(client_srv, msg, index)
+		}
+
+	}
+	return nil
 }
