@@ -12,18 +12,28 @@ import (
 	"github.com/gmail-watcher/paths"
 	"github.com/pkg/browser"
 	"golang.org/x/oauth2"
+	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
 
 type LocalClient struct {
 	*http.Client
+	TK string
 }
 
 func (client *LocalClient) GetGmailServ(ctx *context.Context) (*gmail.Service, error) {
 	srv, err := gmail.NewService(*ctx, option.WithHTTPClient(client.Client))
 	return srv, err
 
+}
+
+func (client *LocalClient) GetCalSrv(ctx *context.Context) (*calendar.Service, error) {
+	srv, err := calendar.NewService(*ctx, option.WithHTTPClient(client.Client))
+	if err != nil {
+		log.Fatalf("Unable to retrieve Calendar client: %v", err)
+	}
+	return srv, nil
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
@@ -35,11 +45,13 @@ func CreateClient(config *oauth2.Config, tokFile string) LocalClient {
 		tok = GetTokenFromWeb(config)
 		io_helpers.SaveToken(tokFile, tok)
 	}
-	return LocalClient{config.Client(context.Background(), tok)}
+	return LocalClient{config.Client(context.Background(), tok),
+		tokFile}
 }
 
 // Request a token from the web, then returns the retrieved token.
 func GetTokenFromWeb(config *oauth2.Config) *oauth2.Token {
+	log.Println("Getting token from web")
 	channel := make(chan string, 1)
 	wg := &sync.WaitGroup{}
 	log.Printf("Getting Token From Web")

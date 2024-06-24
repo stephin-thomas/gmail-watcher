@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/alecthomas/kong"
+	"github.com/gmail-watcher/calendar"
 	"github.com/gmail-watcher/common"
 	"github.com/gmail-watcher/gmail_client"
 	"github.com/gmail-watcher/io_helpers"
@@ -31,10 +32,10 @@ func init() {
 
 func main() {
 	cli_ctx := kong.Parse(&CLI)
-	io_helpers.Create_folder(paths.CONFIG_FOLDER)
+	io_helpers.CreateFolder(paths.CONFIG_FOLDER)
 
 	//This is a temporary function to copy assets. Should be removed when assets folders are created by the installation
-	io_helpers.Copy_asset(paths.ASSETS_SOURCE_PATH, paths.ASSETS_PATH)
+	io_helpers.CopyAssets(paths.ASSETS_SOURCE_PATH, paths.ASSETS_PATH)
 	ctx := context.Background()
 	config_json, err := os.ReadFile(paths.CREDENTIALS_FILE)
 	// If modifying these scopes, delete your previously saved token.json.
@@ -43,17 +44,25 @@ func main() {
 		fmt.Printf("Unable to read client secret file: %v\n Follow the steps 'Enable the API' and 'Authorize credentials for a desktop application' from the following page\n https://developers.google.com/gmail/api/quickstart/go \n Note:- Ignore all other steps\n rename the downloaded file to credentials.json and copy it to\n~/.config/gmail_watcher", err)
 		panic("No client secret file")
 	}
-	err = gmail_client.Change_server_port(config, paths.PORT)
+	err = gmail_client.ChangeServerPort(config, paths.PORT)
 
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
 
-	var tokFiles []string
-
-	tokFiles, err = io_helpers.Load_json_list(paths.LOGIN_TOKENS_LIST_FILE)
+	tokFiles, err := io_helpers.LoadJsonList(paths.LOGIN_TOKENS_LIST_FILE)
 	if err != nil {
-		tokFiles = make([]string, 0)
+		// tokFiles = make([]string, 0)
+		log.Fatalln("Error getting token files, Please try logging in")
+	}
+	clients := make([]*common.LocalClient, 0, len(tokFiles))
+	// var clients []*common.LocalClient
+	for _, tk := range tokFiles {
+		client := common.CreateClient(config, tk)
+		clients = append(clients, &client)
+	}
+	if len(clients) == 0 {
+		log.Fatalln("Error generating clients, No clients found")
 	}
 	// var max_retries uint8 = 3
 	max_retries := CLI.Gmail.MaxRetries
@@ -61,7 +70,7 @@ func main() {
 	case "login":
 		{
 			token := common.GetTokenFromWeb(config)
-			token_file_path, err := gmail_client.Add_token(&tokFiles)
+			token_file_path, err := gmail_client.AddToken(&tokFiles)
 			if err != nil {
 				fmt.Printf("Error Occured")
 				log.Printf("Error adding token :- %v", err)
@@ -71,14 +80,14 @@ func main() {
 
 	case "gmail list":
 		{
-			clientSrvs, loginNotFound := gmail_client.GetClientSrvs(ctx, max_retries, config, tokFiles)
+			gmailSrvs, loginNotFound := gmail_client.GetClientSrvs(clients, ctx, max_retries)
 			if loginNotFound {
 				log.Fatalf("No Logins found \n%s", tokFiles)
 				return
 			}
 			list_len := CLI.Gmail.List.ListLen
 			// list_len := 15
-			for _, client_srv := range clientSrvs {
+			for _, client_srv := range gmailSrvs {
 				var wg sync.WaitGroup
 				mailMessage := make(chan string)
 				msgs, err := client_srv.GetMsgIDs()
@@ -121,7 +130,7 @@ func main() {
 		}
 	case "gmail daemon":
 		{
-			clientSrvs, loginNotFound := gmail_client.GetClientSrvs(ctx, max_retries, config, tokFiles)
+			clientSrvs, loginNotFound := gmail_client.GetClientSrvs(clients, ctx, max_retries)
 			if loginNotFound {
 				log.Fatalf("Login not found when running daemon")
 			}
@@ -129,5 +138,17 @@ func main() {
 		}
 	default:
 		panic(cli_ctx.Command())
+	case "cal":
+		{
+
+			// calendar_services := make([]string, len(clients))
+			for _, client := range clients {
+				cal_srv, err := client.GetCalSrv(&ctx)
+				if err != nil {
+					return
+				}
+				calendar.GetEvents(cal_srv)
+			}
+		}
 	}
 }

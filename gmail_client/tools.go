@@ -15,7 +15,7 @@ import (
 	"google.golang.org/api/gmail/v1"
 )
 
-func Add_random_token_path(tokFiles *[]string) *string {
+func AddRandomTokenPath(tokFiles *[]string) *string {
 	token_file_name := fmt.Sprintf("token_%s.json", uuid.NewString())
 	token_file_path := path.Join(paths.CONFIG_FOLDER, token_file_name)
 	*tokFiles = append(*tokFiles, token_file_path)
@@ -32,21 +32,21 @@ func CreateIDList(records *[]*gmail.Message) *map[string]struct{} {
 	return &id_list
 }
 
-func Add_token(tokFiles *[]string) (*string, error) {
+func AddToken(tokFiles *[]string) (*string, error) {
 	log.Println("Adding new token")
-	tok_file_name := Add_random_token_path(tokFiles)
+	tok_file_name := AddRandomTokenPath(tokFiles)
 	log.Println("Added random token file to:-", tok_file_name)
-	err := io_helpers.Serialize_n_save(tokFiles, paths.LOGIN_TOKENS_LIST_FILE)
+	err := io_helpers.SerializeNsave(tokFiles, paths.LOGIN_TOKENS_LIST_FILE)
 	if err != nil {
 		return nil, fmt.Errorf("Error adding tokens:- %w", err)
 	}
 	return tok_file_name, nil
 }
-func Change_server_port(creds *oauth2.Config, port int64) error {
+func ChangeServerPort(creds *oauth2.Config, port int64) error {
 	server_url := fmt.Sprintf("http://localhost:%d", port)
 	if creds.RedirectURL != server_url {
 		creds.RedirectURL = server_url
-		err := io_helpers.Serialize_n_save(*creds, paths.CREDENTIALS_FILE)
+		err := io_helpers.SerializeNsave(*creds, paths.CREDENTIALS_FILE)
 		return fmt.Errorf("Error changing server port:- %w", err)
 	}
 	return nil

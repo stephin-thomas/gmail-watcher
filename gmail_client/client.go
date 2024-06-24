@@ -8,7 +8,6 @@ import (
 
 	"github.com/gmail-watcher/common"
 	"github.com/gmail-watcher/io_helpers"
-	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
 )
 
@@ -20,7 +19,7 @@ type GmailService struct {
 }
 
 func (c *GmailService) Save() error {
-	err := io_helpers.Serialize_n_save(c.ID_DB, c.DB_Path)
+	err := io_helpers.SerializeNsave(c.ID_DB, c.DB_Path)
 	return err
 }
 func (c *GmailService) find_msg(needle string) bool {
@@ -51,11 +50,6 @@ func (c *GmailService) UpdateMsgIDs() ([]*string, error) {
 	}
 	if updated {
 		c.ID_DB = *CreateIDList(&msg_list.Messages)
-		// c.ID_DB = make(map[string]struct{})
-		// for _, msg_id := range msg_list.Messages {
-		// 	(c.ID_DB)[msg_id.Id] = struct{}{}
-
-		// }
 
 	}
 	return updated_msg_list, nil
@@ -80,14 +74,13 @@ func (c *GmailService) GetEmailProfile() (string, error) {
 	return c.EmailID, nil
 }
 
-func CollectGmailServ(config *oauth2.Config, ctx *context.Context, tokFiles *[]string, CONFIG_FOLDER *string) ([]*GmailService, error) {
-	log.Println("Collecting Gmail Clients from configuration from tokens", tokFiles)
-	var gmail_services []*GmailService
-
-	for _, tokFile := range *tokFiles {
-		client := common.CreateClient(config, tokFile)
+func CollectGmailServ(clients []*common.LocalClient, ctx *context.Context, CONFIG_FOLDER *string) ([]*GmailService, error) {
+	// var gmail_services []*GmailService
+	gmail_services := make([]*GmailService, 0, len(clients))
+	for _, client := range clients {
+		// client := common.CreateClient(config, tokFile)
 		srv, err := client.GetGmailServ(ctx)
-
+		tokFile := client.TK
 		db_path := strings.Replace(tokFile, "token_", "id_db_", -1)
 		log.Println("Using DB at", db_path)
 		for err != nil {

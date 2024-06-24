@@ -9,7 +9,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func Serialize_n_save(json_unser any, file_name string) error {
+func SerializeNsave(json_unser any, file_name string) error {
 	json_b, err := json.Marshal(json_unser)
 	if err != nil {
 		return err
@@ -41,7 +41,7 @@ func TokenFromFile(file string) (*oauth2.Token, error) {
 	err = json.NewDecoder(f).Decode(tok)
 	return tok, err
 }
-func Load_json_list(path string) ([]string, error) {
+func LoadJsonList(path string) ([]string, error) {
 	var tok_list []string
 	json_file, err := os.ReadFile(path)
 	if err != nil {
