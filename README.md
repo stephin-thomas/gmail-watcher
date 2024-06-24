@@ -12,4 +12,6 @@ Rename the downloaded file to credentials.json and copy it to
 ```
 ~/.config/gmail_watcher
 ```
-Final binary tested on archlinux
+Run `gmail-watcher --help` for more information 
+
+Final binary tested on fedora
