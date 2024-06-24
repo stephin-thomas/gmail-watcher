@@ -8,7 +8,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/gmail-watcher/helpers"
+	"github.com/gmail-watcher/io_helpers"
 	"github.com/gmail-watcher/paths"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
@@ -36,7 +36,7 @@ func Add_token(tokFiles *[]string) (*string, error) {
 	log.Println("Adding new token")
 	tok_file_name := Add_random_token_path(tokFiles)
 	log.Println("Added random token file to:-", tok_file_name)
-	err := helpers.Serialize_n_save(tokFiles, paths.LOGIN_TOKENS_LIST_FILE)
+	err := io_helpers.Serialize_n_save(tokFiles, paths.LOGIN_TOKENS_LIST_FILE)
 	if err != nil {
 		return nil, fmt.Errorf("Error adding tokens:- %w", err)
 	}
@@ -46,7 +46,7 @@ func Change_server_port(creds *oauth2.Config, port int64) error {
 	server_url := fmt.Sprintf("http://localhost:%d", port)
 	if creds.RedirectURL != server_url {
 		creds.RedirectURL = server_url
-		err := helpers.Serialize_n_save(*creds, paths.CREDENTIALS_FILE)
+		err := io_helpers.Serialize_n_save(*creds, paths.CREDENTIALS_FILE)
 		return fmt.Errorf("Error changing server port:- %w", err)
 	}
 	return nil
