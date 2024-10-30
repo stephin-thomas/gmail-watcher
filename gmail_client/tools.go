@@ -86,3 +86,13 @@ func token_expired(token_expiry *time.Time) bool {
 		return false
 	}
 }
+
+// Get sender from the gmail.Message headers
+func GetSender(msg *gmail.Message) string {
+	for _, header := range msg.Payload.Headers {
+		if header.Name == "From" {
+			return header.Value
+		}
+	}
+	return "<No From Address>"
+}

@@ -17,6 +17,6 @@ var LOGIN_TOKENS_LIST_FILE = filepath.Join(CONFIG_FOLDER, "login_tokens.json")
 
 // var PORT uint64 = 5000
 var NOTIFICATION_ICON = filepath.Join(CONFIG_FOLDER, "assets/notification.png")
-var LOG_FILE_PATH = filepath.Join(CONFIG_FOLDER, "gmail-watcher.log")
+var LOG_FILE_PATH = filepath.Join("/tmp/", "gmail-watcher.log")
 var ASSETS_SOURCE_PATH = "assets/notification.png"
 var ASSETS_PATH = filepath.Join(CONFIG_FOLDER, ASSETS_SOURCE_PATH)

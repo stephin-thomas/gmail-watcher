@@ -34,9 +34,9 @@ func (c *GmailService) GetMsgIDs() (*gmail.ListMessagesResponse, error) {
 
 	return msg_list, err
 }
-func (c *GmailService) UpdateMsgIDs() ([]*string, error) {
+func (c *GmailService) UpdateMsgIDs() ([]*gmail.Message, error) {
 	var updated bool = false
-	var updated_msg_list []*string
+	var updated_msg_list []*gmail.Message
 	msg_list, err := c.GetMsgIDs()
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (c *GmailService) UpdateMsgIDs() ([]*string, error) {
 			if updated != true {
 				updated = true
 			}
-			updated_msg_list = append(updated_msg_list, &msg_id.Id)
+			updated_msg_list = append(updated_msg_list, msg_id)
 		}
 
 	}
@@ -105,28 +105,49 @@ func CollectGmailServ(clients []*common.LocalClient, ctx *context.Context, CONFI
 	}
 	return gmail_services, nil
 }
-func BroadcastEmails(client_srv *GmailService, list_len uint8, wg *sync.WaitGroup, mailMessage chan string) error {
-	msgs, err := client_srv.GetMsgIDs()
-	if err != nil {
-		fmt.Println("Error getting emails msg ids")
-		log.Printf("Error getting emails msg ids:- %v", err)
-		return err
-	} else {
-		fmt.Printf("Email:- %s\n", client_srv.EmailID)
-		for index, msg := range msgs.Messages[:list_len] {
-			wg.Add(1)
-			go func(client_srv *GmailService, msg *gmail.Message, index int) {
-				msg_mail, err := client_srv.GetMsg("me", msg.Id)
-				if err != nil {
-					log.Printf("Error getting emails:- %v", err)
-					fmt.Print("Error getting emails")
-				} else {
-					mailMessage <- msg_mail.Snippet
-				}
-				defer wg.Done()
-			}(client_srv, msg, index)
-		}
 
+func FetchMail(client_srv *GmailService, msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
+	var all_msgs []*gmail.Message
+
+	log.Printf("Fetching mails for client:- %s\n", client_srv.EmailID)
+	for _, msg := range msg_id_list {
+		msg_mail, err := client_srv.GetMsg("me", msg.Id)
+		if err != nil {
+			log.Printf("Error getting email %v", err)
+			return nil, err
+		}
+		all_msgs = append(all_msgs, msg_mail)
 	}
-	return nil
+	return &all_msgs, nil
+}
+
+func FetchMailConcurrent(client_srv *GmailService, msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
+	var wg sync.WaitGroup
+	mailMessage := make(chan *gmail.Message)
+	var all_msgs []*gmail.Message
+	log.Printf("Fetching mails for client:- %s\n", client_srv.EmailID)
+	for _, msg := range msg_id_list {
+		wg.Add(1)
+		go getMsg(client_srv, msg, mailMessage, &wg)
+	}
+	// Launch a goroutine to close the channel after sending is done
+	go func() {
+		wg.Wait()                // Wait for all senders to finish
+		defer close(mailMessage) // Close the channel after all sends are complete
+	}()
+	for msg_c := range mailMessage {
+		all_msgs = append(all_msgs, msg_c)
+	}
+
+	return &all_msgs, nil
+}
+func getMsg(client_srv *GmailService, msg *gmail.Message, mailMessage chan *gmail.Message, wg *sync.WaitGroup) {
+	msg_mail, err := client_srv.GetMsg("me", msg.Id)
+	if err != nil {
+		log.Printf("Error getting emails:- %v", err)
+		fmt.Print("Error getting emails")
+	} else {
+		mailMessage <- msg_mail
+	}
+	defer wg.Done()
 }

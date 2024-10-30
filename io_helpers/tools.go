@@ -2,7 +2,6 @@ package io_helpers
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -12,14 +11,16 @@ import (
 	"github.com/gmail-watcher/paths"
 )
 
-func CreateFolder(path string) {
+func CreateFolder(path string) bool {
 	_, err := os.Stat(path)
 	if err != nil {
 		err := os.Mkdir(path, fs.ModePerm)
 		if err != nil {
 			log.Fatalf("%v", err)
 		}
+		return true
 	}
+	return false
 }
 func CopyAssets(sourceFile string, destinationFile string) {
 	input, err1 := os.ReadFile(sourceFile)
@@ -44,8 +45,8 @@ func CopyAssets(sourceFile string, destinationFile string) {
 	}
 
 }
-func Notify(msg *string, user_email *string) {
-	err := beeep.Notify(fmt.Sprintf("Gmail Watcher:-%s", *user_email), *msg, paths.NOTIFICATION_ICON)
+func Notify(msg *string, heading *string) {
+	err := beeep.Notify(*heading, *msg, paths.NOTIFICATION_ICON)
 	if err != nil {
 		log.Println("Error during notification", err)
 	}
