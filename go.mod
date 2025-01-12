@@ -1,6 +1,6 @@
 module github.com/gmail-watcher
 
-go 1.22.0
+go 1.22
 
 toolchain go1.23.2
 
