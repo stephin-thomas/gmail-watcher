@@ -43,7 +43,7 @@ func init() {
 	log.SetOutput(logFile)
 	err = io_helpers.CopyAssets(exports.ASSETS_SOURCE_PATH, exports.ASSETS_PATH)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Error copying assets", err)
 	}
 	fmt.Println("Log file set as ", exports.LOG_FILE_PATH)
 	//This is a temporary function to copy assets. Should be removed when assets folders are created by the installation
@@ -109,10 +109,9 @@ func main() {
 		}
 		*app_config.UserConfigs = append(*app_config.UserConfigs, newUserConfig)
 		fmt.Printf("App Config %v\n", app_config)
-		err = io_helpers.SerializeNsave(app_config, exports.APP_CONFIG)
+		err = app_config.Save()
 		if err != nil {
-			fmt.Printf("Errro saving login configurations %v", err)
-			log.Fatalf("Unable to save login configurations %v", err)
+			log.Fatalln(err.Error())
 		}
 		return
 
@@ -158,11 +157,27 @@ func main() {
 			}
 			if CLI.Login.Delete.All {
 				var userconfigs []UserConfig
+				userconfigs = make([]UserConfig, 0, 1)
 				app_config.UserConfigs = &userconfigs
-				return
 			} else {
-				app_config.UserConfigs = removeLoginIndices(app_config.UserConfigs, CLI.Login.Delete.Index)
-				return
+				for _, login_index := range CLI.Login.Delete.Index {
+					if login_index == 0 || login_index > len(CLI.Login.Delete.Index) {
+						fmt.Println("No user at index", login_index)
+					}
+					fmt.Println("Removing", login_index, (*app_config.UserConfigs)[login_index-1].EmailID)
+					deleteSliceIndex(app_config.UserConfigs, login_index-1)
+				}
+			}
+			err = app_config.Save()
+			if err != nil {
+				log.Fatalln(err.Error())
+			}
+		}
+	case "login list-users":
+		{
+			for index, user := range *app_config.UserConfigs {
+				fmt.Println(index+1, user.EmailID)
+
 			}
 		}
 
