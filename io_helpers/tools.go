@@ -1,7 +1,6 @@
 package io_helpers
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -9,48 +8,87 @@ import (
 	"path/filepath"
 
 	"github.com/gen2brain/beeep"
-	"github.com/gmail-watcher/paths"
+	"github.com/gmail-watcher/exports"
 )
 
-func CreateFolder(path string) {
+func FileExists(filename string) bool {
+	_, err := os.Stat(filename)
+	return !os.IsNotExist(err)
+}
+
+func CreateFolder(path string) error {
 	_, err := os.Stat(path)
 	if err != nil {
-		err := os.Mkdir(path, fs.ModePerm)
+		err := os.MkdirAll(path, os.ModePerm)
 		if err != nil {
-			log.Fatalf("%v", err)
+			return fmt.Errorf("error creating folder %w", err)
 		}
+	} else {
+		log.Println("Folder exists", path)
 	}
+	return nil
 }
-func CopyAssets(sourceFile string, destinationFile string) {
-	input, err1 := os.ReadFile(sourceFile)
-	err2 := os.MkdirAll(filepath.Dir(destinationFile), os.ModePerm)
-	if _, err := os.Stat(destinationFile); os.IsNotExist(err) {
-		file, err1 := os.Create(destinationFile)
-		_, err2 := file.Write(input)
-		//err = os.WriteFile(file, input, 0644)
-		if err1 != nil || err2 != nil {
-			log.Println(err)
-			log.Println("Error creating", destinationFile)
-			return
+func DeleteFile(path string) error {
+	_, err := os.Stat(path)
+	if err == nil {
+		err := os.Remove(path)
+		if err != nil {
+			return fmt.Errorf("error deleting file: %v", err)
 		}
-
+	} else {
+		log.Println("file doesn't exist", path)
 	}
-	err := errors.Join(err1, err2)
-
-	// Handle the combined error
-	if err != nil {
-		log.Println("Error:", err)
-		// Additional error handling logic can be added here
-	}
-
+	return nil
 }
-func Notify(msg *string, user_email *string) {
-	err := beeep.Notify(fmt.Sprintf("Gmail Watcher:-%s", *user_email), *msg, paths.NOTIFICATION_ICON)
+
+func CopyAssets(sourceFolder string, destinationFolder string) error {
+	err1 := filepath.WalkDir(sourceFolder, func(src_path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		dest_path := filepath.Join(destinationFolder, filepath.Base(src_path))
+		err = CopyFile(src_path, dest_path)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err1 != nil {
+		return fmt.Errorf("error copying assets %w", err1)
+	}
+	return nil
+}
+
+func CopyFile(sourceFile string, destinationFile string) error {
+	if !FileExists(destinationFile) {
+		file, err := os.Create(destinationFile)
+		if err != nil {
+			return fmt.Errorf("error creating file %v - %w", destinationFile, err)
+		}
+		input, err := os.ReadFile(sourceFile)
+		if err != nil {
+			return fmt.Errorf("error reading file %v - %w", sourceFile, err)
+		}
+		_, err = file.Write(input)
+		if err != nil {
+			return fmt.Errorf("error writing to file %v - %w", file.Name(), err)
+		}
+		return err
+	}
+	log.Println("files tryping to copy is already found at the dest skipping", sourceFile, destinationFile)
+	return nil
+}
+
+func Notify(msg string, heading string) error {
+	err := beeep.Notify(heading, msg, exports.NOTIFICATION_ICON)
 	if err != nil {
-		log.Println("Error during notification", err)
+		log.Println("error during notification", err)
+		return fmt.Errorf("error during notification %w", err)
+
 	}
 	err = beeep.Beep(beeep.DefaultFreq, beeep.DefaultDuration)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("error during notification %w", err)
 	}
+	return nil
 }

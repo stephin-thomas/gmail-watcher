@@ -2,26 +2,27 @@ package gmail_client
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
-	"context"
 	"log"
 
-	"github.com/gmail-watcher/common"
 	"github.com/gmail-watcher/io_helpers"
 	"google.golang.org/api/gmail/v1"
 )
 
 type GmailService struct {
 	GmailService *gmail.Service
-	EmailID      string
-	DB_Path      string
-	ID_DB        map[string]struct{}
+	GmailUserConfig
+	ID_DB map[string]struct{}
+}
+
+type GmailUserConfig struct {
+	EmailID string
+	DB_Path string
 }
 
 func (c *GmailService) Save() error {
-	err := io_helpers.SerializeNsave(c.ID_DB, c.DB_Path)
+	err := io_helpers.SerializeNsave(c.ID_DB, c.GmailUserConfig.DB_Path)
 	return err
 }
 func (c *GmailService) find_msg(needle string) bool {
@@ -34,19 +35,19 @@ func (c *GmailService) GetMsgIDs() (*gmail.ListMessagesResponse, error) {
 
 	return msg_list, err
 }
-func (c *GmailService) UpdateMsgIDs() ([]*string, error) {
+func (c *GmailService) UpdateMsgIDs() ([]*gmail.Message, error) {
 	var updated bool = false
-	var updated_msg_list []*string
+	var updated_msg_list []*gmail.Message
 	msg_list, err := c.GetMsgIDs()
 	if err != nil {
 		return nil, err
 	}
 	for _, msg_id := range msg_list.Messages {
 		if !c.find_msg(msg_id.Id) {
-			if updated != true {
+			if !updated {
 				updated = true
 			}
-			updated_msg_list = append(updated_msg_list, &msg_id.Id)
+			updated_msg_list = append(updated_msg_list, msg_id)
 		}
 
 	}
@@ -63,70 +64,80 @@ func (c *GmailService) GetMsg(user string, msg_id string) (*gmail.Message, error
 
 }
 
-func (c *GmailService) GetEmailProfile() (string, error) {
+func (c *GmailService) GetEmailProfile() (*string, error) {
 	if c.EmailID == "" {
 		usr_name, err := c.GmailService.Users.GetProfile("me").Do()
 		if err != nil {
-			log.Fatal("Error getting email profile")
+			return nil, fmt.Errorf("error getting email profile %w", err)
 		} else {
 			c.EmailID = usr_name.EmailAddress
 		}
 	}
 
-	return c.EmailID, nil
+	return &c.EmailID, nil
 }
 
-func CollectGmailServ(clients []*common.LocalClient, ctx *context.Context, CONFIG_FOLDER *string) ([]*GmailService, error) {
-	// var gmail_services []*GmailService
-	gmail_services := make([]*GmailService, 0, len(clients))
-	for _, client := range clients {
-		// client := common.CreateClient(config, tokFile)
-		srv, err := client.GetGmailServ(ctx)
-		tokFile := client.TK
-		db_path := strings.Replace(tokFile, "token_", "id_db_", -1)
-		log.Println("Using DB at", db_path)
-		for err != nil {
+func (client_srv *GmailService) FetchAllMail(msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
+	var all_msgs []*gmail.Message
+
+	log.Printf("Fetching mails for client:- %s\n", client_srv.EmailID)
+	for _, msg := range msg_id_list {
+		msg_mail, err := client_srv.GetMsg("me", msg.Id)
+		if err != nil {
+			log.Printf("Error getting email %v", err)
 			return nil, err
 		}
-		var id_db map[string]struct{}
-		id_db, err = LoadIDList(db_path)
-		if err != nil {
-			id_db = make(map[string]struct{})
-		}
-		client_service := GmailService{
-			GmailService: srv,
-			ID_DB:        id_db,
-			DB_Path:      db_path,
-			EmailID:      "",
-		}
-		client_service.GetEmailProfile()
-		log.Println("Successfully created client")
-		gmail_services = append(gmail_services, &client_service)
+		all_msgs = append(all_msgs, msg_mail)
 	}
-	return gmail_services, nil
+	return &all_msgs, nil
 }
-func BroadcastEmails(client_srv *GmailService, list_len uint8, wg *sync.WaitGroup, mailMessage chan string) error {
-	msgs, err := client_srv.GetMsgIDs()
-	if err != nil {
-		fmt.Println("Error getting emails msg ids")
-		log.Printf("Error getting emails msg ids:- %v", err)
-		return err
-	} else {
-		fmt.Printf("Email:- %s\n", client_srv.EmailID)
-		for index, msg := range msgs.Messages[:list_len] {
-			wg.Add(1)
-			go func(client_srv *GmailService, msg *gmail.Message, index int) {
-				msg_mail, err := client_srv.GetMsg("me", msg.Id)
-				if err != nil {
-					log.Printf("Error getting emails:- %v", err)
-					fmt.Print("Error getting emails")
-				} else {
-					mailMessage <- msg_mail.Snippet
-				}
-				defer wg.Done()
-			}(client_srv, msg, index)
-		}
 
+func (client_srv *GmailService) FetchAllMailConcurrent(msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
+	log.Println("Fetching mails in parallel")
+	var wg sync.WaitGroup
+	mailMessage := make(chan *gmail.Message, len(msg_id_list))
+	// Use a buffered channel to limit concurrency
+	semaphore := make(chan struct{}, 4)
+	log.Printf("Fetching mails for client:- %s\n", client_srv.EmailID)
+	for _, msg := range msg_id_list {
+		semaphore <- struct{}{}
+		wg.Add(1)
+		go getMsg(client_srv, msg, mailMessage, &wg, &semaphore)
 	}
-	return nil
+	// Launch a goroutine to close the channel after sending is done
+	go func() {
+		wg.Wait() // Wait for all senders to finish
+		log.Println("Closing mail message channel")
+		defer close(mailMessage) // Close the channel after all sends are complete
+	}()
+	all_msgs := readMsgs(mailMessage)
+
+	return &all_msgs, nil
+}
+
+func readMsgs(mailMessage chan *gmail.Message) []*gmail.Message {
+	var all_msgs []*gmail.Message
+	for msg_c := range mailMessage {
+		all_msgs = append(all_msgs, msg_c)
+	}
+	return all_msgs
+}
+
+func getMsg(client_srv *GmailService, msg *gmail.Message, mailMessage chan *gmail.Message, wg *sync.WaitGroup, semaphore *chan struct{}) {
+	msg_mail, err := client_srv.GetMsg("me", msg.Id)
+	log.Println("found msg", msg_mail.Id)
+	if err != nil {
+		log.Printf("Error getting emails:- %v", err)
+		fmt.Print("Error getting emails")
+	} else {
+		mailMessage <- msg_mail
+	}
+	log.Println("releasing back seamphore of", msg_mail.Id)
+	<-*semaphore
+	wg.Done()
+
+	// defer func() {
+	// 	// Release the token back to the semaphore when the worker is done.
+
+	// }()
 }
