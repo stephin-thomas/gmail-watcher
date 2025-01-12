@@ -3,6 +3,6 @@ test:
 	rm -rf {{db_regex}}
 	go run "$PWD/..." gmail daemon
 build:
-	go build $PWD/... 
+	go build -o ./build/ ./cmd/gmail-watcher
 run:
 	go run "$PWD/..." gmail daemon
