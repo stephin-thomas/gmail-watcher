@@ -2,26 +2,27 @@ package gmail_client
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
-	"context"
 	"log"
 
-	"github.com/gmail-watcher/common"
 	"github.com/gmail-watcher/io_helpers"
 	"google.golang.org/api/gmail/v1"
 )
 
 type GmailService struct {
 	GmailService *gmail.Service
-	EmailID      string
-	DB_Path      string
-	ID_DB        map[string]struct{}
+	GmailUserConfig
+	ID_DB map[string]struct{}
+}
+
+type GmailUserConfig struct {
+	EmailID string
+	DB_Path string
 }
 
 func (c *GmailService) Save() error {
-	err := io_helpers.SerializeNsave(c.ID_DB, c.DB_Path)
+	err := io_helpers.SerializeNsave(c.ID_DB, c.GmailUserConfig.DB_Path)
 	return err
 }
 func (c *GmailService) find_msg(needle string) bool {
@@ -43,7 +44,7 @@ func (c *GmailService) UpdateMsgIDs() ([]*gmail.Message, error) {
 	}
 	for _, msg_id := range msg_list.Messages {
 		if !c.find_msg(msg_id.Id) {
-			if updated != true {
+			if !updated {
 				updated = true
 			}
 			updated_msg_list = append(updated_msg_list, msg_id)
@@ -63,50 +64,20 @@ func (c *GmailService) GetMsg(user string, msg_id string) (*gmail.Message, error
 
 }
 
-func (c *GmailService) GetEmailProfile() (string, error) {
+func (c *GmailService) GetEmailProfile() (*string, error) {
 	if c.EmailID == "" {
 		usr_name, err := c.GmailService.Users.GetProfile("me").Do()
 		if err != nil {
-			log.Fatal("Error getting email profile")
+			return nil, fmt.Errorf("error getting email profile %w", err)
 		} else {
 			c.EmailID = usr_name.EmailAddress
 		}
 	}
 
-	return c.EmailID, nil
+	return &c.EmailID, nil
 }
 
-func CollectGmailServ(clients []*common.LocalClient, ctx *context.Context, CONFIG_FOLDER *string) ([]*GmailService, error) {
-	// var gmail_services []*GmailService
-	gmail_services := make([]*GmailService, 0, len(clients))
-	for _, client := range clients {
-		// client := common.CreateClient(config, tokFile)
-		srv, err := client.GetGmailServ(ctx)
-		tokFile := client.TK
-		db_path := strings.Replace(tokFile, "token_", "id_db_", -1)
-		log.Println("Using DB at", db_path)
-		for err != nil {
-			return nil, err
-		}
-		var id_db map[string]struct{}
-		id_db, err = LoadIDList(db_path)
-		if err != nil {
-			id_db = make(map[string]struct{})
-		}
-		client_service := GmailService{
-			GmailService: srv,
-			ID_DB:        id_db,
-			DB_Path:      db_path,
-			EmailID:      "",
-		}
-		client_service.GetEmailProfile()
-		log.Println("Successfully created client")
-		gmail_services = append(gmail_services, &client_service)
-	}
-	return gmail_services, nil
-}
-
-func FetchMail(client_srv *GmailService, msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
+func (client_srv *GmailService) FetchAllMail(msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
 	var all_msgs []*gmail.Message
 
 	log.Printf("Fetching mails for client:- %s\n", client_srv.EmailID)
@@ -121,14 +92,17 @@ func FetchMail(client_srv *GmailService, msg_id_list []*gmail.Message) (*[]*gmai
 	return &all_msgs, nil
 }
 
-func FetchMailConcurrent(client_srv *GmailService, msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
+func (client_srv *GmailService) FetchAllMailConcurrent(msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
 	var wg sync.WaitGroup
 	mailMessage := make(chan *gmail.Message)
+	// Use a buffered channel to limit concurrency
+	semaphore := make(chan struct{}, 4)
 	var all_msgs []*gmail.Message
 	log.Printf("Fetching mails for client:- %s\n", client_srv.EmailID)
 	for _, msg := range msg_id_list {
+		semaphore <- struct{}{}
 		wg.Add(1)
-		go getMsg(client_srv, msg, mailMessage, &wg)
+		go getMsg(client_srv, msg, mailMessage, &wg, &semaphore)
 	}
 	// Launch a goroutine to close the channel after sending is done
 	go func() {
@@ -141,7 +115,8 @@ func FetchMailConcurrent(client_srv *GmailService, msg_id_list []*gmail.Message)
 
 	return &all_msgs, nil
 }
-func getMsg(client_srv *GmailService, msg *gmail.Message, mailMessage chan *gmail.Message, wg *sync.WaitGroup) {
+
+func getMsg(client_srv *GmailService, msg *gmail.Message, mailMessage chan *gmail.Message, wg *sync.WaitGroup, semaphore *chan struct{}) {
 	msg_mail, err := client_srv.GetMsg("me", msg.Id)
 	if err != nil {
 		log.Printf("Error getting emails:- %v", err)
@@ -149,5 +124,10 @@ func getMsg(client_srv *GmailService, msg *gmail.Message, mailMessage chan *gmai
 	} else {
 		mailMessage <- msg_mail
 	}
-	defer wg.Done()
+	defer func() {
+		// Release the token back to the semaphore when the worker is done.
+
+		wg.Done()
+		<-*semaphore
+	}()
 }

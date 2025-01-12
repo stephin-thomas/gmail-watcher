@@ -1,0 +1,8 @@
+db_regex := "$HOME/.local/share/gmail_watcher/db*.json"
+test:
+	rm -rf {{db_regex}}
+	go run "$PWD/..." gmail daemon
+build:
+	go build $PWD/... 
+run:
+	go run "$PWD/..." gmail daemon
