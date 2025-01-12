@@ -51,7 +51,7 @@ func init() {
 	log.Println("Data assets Folder:-", exports.ASSETS_PATH)
 	err = io_helpers.CopyAssets(exports.ASSETS_SOURCE_PATH, exports.ASSETS_PATH)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Error copying assets ", err)
 	}
 }
 
