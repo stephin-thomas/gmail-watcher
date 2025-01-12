@@ -23,24 +23,24 @@ import (
 func init() {
 	// var logFile *os.File
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	err := io_helpers.CreateFolder(exports.CONFIG_FOLDER)
-	if err != nil {
-		log.Fatalf("error creating folder %v %v", exports.CONFIG_FOLDER, err)
-	}
-	err = io_helpers.CreateFolder(exports.DATA_FOLDER)
+	err := io_helpers.CreateFolder(exports.DATA_FOLDER)
 	if err != nil {
 		log.Fatalf("error creating folder %v %v", exports.DATA_FOLDER, err)
 	}
-	err = io_helpers.CreateFolder(exports.ASSETS_PATH)
-	if err != nil {
-		log.Fatalf("error creating folder %v %v", exports.ASSETS_PATH, err)
-	}
-	logFile, err := os.OpenFile(exports.LOG_FILE_PATH, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	logFile, err := os.OpenFile(exports.LOG_FILE_PATH, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Fatalf("error opening log file %v", err)
 	}
 	// Redirect log output to the file
 	log.SetOutput(logFile)
+	err = io_helpers.CreateFolder(exports.CONFIG_FOLDER)
+	if err != nil {
+		log.Fatalf("error creating folder %v %v", exports.CONFIG_FOLDER, err)
+	}
+	err = io_helpers.CreateFolder(exports.ASSETS_PATH)
+	if err != nil {
+		log.Fatalf("error creating folder %v %v", exports.ASSETS_PATH, err)
+	}
 	err = io_helpers.CopyAssets(exports.ASSETS_SOURCE_PATH, exports.ASSETS_PATH)
 	if err != nil {
 		log.Println("Error copying assets", err)
