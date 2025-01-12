@@ -4,7 +4,6 @@
 *.dll
 *.so
 *.dylib
-gmail_watcher
 # Test binary, built with `go test -c`
 *.test
 
@@ -13,4 +12,4 @@ gmail_watcher
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
-gmail-watcher
+build

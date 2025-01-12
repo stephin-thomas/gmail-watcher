@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/gmail-watcher/exports"
@@ -19,6 +18,14 @@ type AppConfig struct {
 	UserConfigs *[]UserConfig
 }
 
+func (app_config AppConfig) Save() error {
+	err := io_helpers.SerializeNsave(app_config, exports.APP_CONFIG)
+	if err != nil {
+		return fmt.Errorf("Unable to save App configurations %w", err)
+	}
+	return nil
+}
+
 func LoadAppConfig() (*AppConfig, error) {
 	var app_config AppConfig
 	err := io_helpers.DeserializeFromFile(exports.APP_CONFIG, &app_config)
@@ -28,22 +35,10 @@ func LoadAppConfig() (*AppConfig, error) {
 	return &app_config, nil
 }
 
-func removeLoginIndices(slice *[]UserConfig, indices []int) *[]UserConfig {
-	// Sort indices in descending order to avoid index shifts during removal
-	sort.Sort(sort.Reverse(sort.IntSlice(indices)))
-
-	for _, index := range indices {
-		// Validate index within slice bounds
-		if index < 0 || index >= len(*slice) {
-			continue
-		}
-
-		// Remove element at index
-		*slice = append((*slice)[:index], (*slice)[index+1:]...)
-	}
-
-	return slice
+func deleteSliceIndex(slice *[]UserConfig, index int) {
+	*slice = append((*slice)[:index], (*slice)[index+1:]...)
 }
+
 func isGmailSubCommand(cli_cmd string) bool {
 	subCommand := strings.Fields(cli_cmd)
 	isSubCommand := len(subCommand) > 1
