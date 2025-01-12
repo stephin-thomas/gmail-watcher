@@ -93,11 +93,11 @@ func (client_srv *GmailService) FetchAllMail(msg_id_list []*gmail.Message) (*[]*
 }
 
 func (client_srv *GmailService) FetchAllMailConcurrent(msg_id_list []*gmail.Message) (*[]*gmail.Message, error) {
+	log.Println("Fetching mails in parallel")
 	var wg sync.WaitGroup
-	mailMessage := make(chan *gmail.Message)
+	mailMessage := make(chan *gmail.Message, len(msg_id_list))
 	// Use a buffered channel to limit concurrency
 	semaphore := make(chan struct{}, 4)
-	var all_msgs []*gmail.Message
 	log.Printf("Fetching mails for client:- %s\n", client_srv.EmailID)
 	for _, msg := range msg_id_list {
 		semaphore <- struct{}{}
@@ -106,28 +106,38 @@ func (client_srv *GmailService) FetchAllMailConcurrent(msg_id_list []*gmail.Mess
 	}
 	// Launch a goroutine to close the channel after sending is done
 	go func() {
-		wg.Wait()                // Wait for all senders to finish
+		wg.Wait() // Wait for all senders to finish
+		log.Println("Closing mail message channel")
 		defer close(mailMessage) // Close the channel after all sends are complete
 	}()
-	for msg_c := range mailMessage {
-		all_msgs = append(all_msgs, msg_c)
-	}
+	all_msgs := readMsgs(mailMessage)
 
 	return &all_msgs, nil
 }
 
+func readMsgs(mailMessage chan *gmail.Message) []*gmail.Message {
+	var all_msgs []*gmail.Message
+	for msg_c := range mailMessage {
+		all_msgs = append(all_msgs, msg_c)
+	}
+	return all_msgs
+}
+
 func getMsg(client_srv *GmailService, msg *gmail.Message, mailMessage chan *gmail.Message, wg *sync.WaitGroup, semaphore *chan struct{}) {
 	msg_mail, err := client_srv.GetMsg("me", msg.Id)
+	log.Println("found msg", msg_mail.Id)
 	if err != nil {
 		log.Printf("Error getting emails:- %v", err)
 		fmt.Print("Error getting emails")
 	} else {
 		mailMessage <- msg_mail
 	}
-	defer func() {
-		// Release the token back to the semaphore when the worker is done.
+	log.Println("releasing back seamphore of", msg_mail.Id)
+	<-*semaphore
+	wg.Done()
 
-		wg.Done()
-		<-*semaphore
-	}()
+	// defer func() {
+	// 	// Release the token back to the semaphore when the worker is done.
+
+	// }()
 }

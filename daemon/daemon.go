@@ -13,6 +13,10 @@ import (
 
 func RunDaemon(max_retries uint8, max_notifications uint8, client_srvs *[]*gmail_client.GmailService) error {
 	log.Println("Daemon started")
+	err := io_helpers.Notify("Started", "Gmail Watcher")
+	if err != nil {
+		log.Fatalln("Error occured notification not working.", err)
+	}
 	_, _ = daemon.SdNotify(true, daemon.SdNotifyReady)
 	shutdown := false
 	for !shutdown {

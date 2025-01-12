@@ -22,7 +22,6 @@ import (
 
 func init() {
 	// var logFile *os.File
-	_ = io_helpers.Notify("Started", "Gmail Watcher")
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	err := io_helpers.CreateFolder(exports.CONFIG_FOLDER)
 	if err != nil {
