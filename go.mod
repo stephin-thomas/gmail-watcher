@@ -1,8 +1,6 @@
 module github.com/gmail-watcher
 
-go 1.22.0
-
-toolchain go1.23.2
+go 1.23.2
 
 require (
 	github.com/adrg/xdg v0.5.3
