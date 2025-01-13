@@ -14,4 +14,8 @@ Rename the downloaded file to credentials.json and copy it to
 ```
 Run `gmail-watcher --help` for more information 
 
-Final binary tested on fedora
+# Building
+```
+mkdir ./build
+go build -o ./build/ ./cmd/gmail-watcher
+```
