@@ -23,6 +23,7 @@ import (
 func init() {
 	// var logFile *os.File
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	err := io_helpers.CreateFolder(exports.DATA_FOLDER)
 	if err != nil {
 		log.Fatalf("error creating folder %v %v", exports.DATA_FOLDER, err)
@@ -36,11 +37,13 @@ func init() {
 	err = io_helpers.CreateFolder(exports.CONFIG_FOLDER)
 	if err != nil {
 		log.Fatalf("error creating folder %v %v", exports.CONFIG_FOLDER, err)
+
 	}
 	err = io_helpers.CreateFolder(exports.ASSETS_PATH)
 	if err != nil {
 		log.Fatalf("error creating folder %v %v", exports.ASSETS_PATH, err)
 	}
+
 	err = io_helpers.CopyAssets(exports.ASSETS_SOURCE_PATH, exports.ASSETS_PATH)
 	if err != nil {
 		log.Println("Error copying assets", err)
@@ -49,10 +52,12 @@ func init() {
 	//This is a temporary function to copy assets. Should be removed when assets folders are created by the installation
 	log.Println("Config Folder:-", exports.CONFIG_FOLDER)
 	log.Println("Data assets Folder:-", exports.ASSETS_PATH)
+
 	// log.Println("DB file set as:-", exports.CREDENTIALS_FILE)
 	err = io_helpers.CopyAssets(exports.ASSETS_SOURCE_PATH, exports.ASSETS_PATH)
 	if err != nil {
 		log.Println("Error copying assets ", err)
+
 	}
 }
 
@@ -109,6 +114,7 @@ func main() {
 			GmailUserConfig: *gmailUserConfig,
 		}
 		*app_config.UserConfigs = append(*app_config.UserConfigs, newUserConfig)
+
 		err = app_config.Save()
 		if err != nil {
 			log.Fatalln(err.Error())
@@ -126,6 +132,7 @@ func main() {
 		fmt.Println("No users found")
 		return
 	}
+
 	gmailServices := make([]*gmail_client.GmailService, 0, len(*app_config.UserConfigs))
 	calServices := make([]*calendar.Service, 0, len(*app_config.UserConfigs))
 	// var gmailServices *[]*gmail_client.GmailService

@@ -40,7 +40,9 @@ func GenNewGmailConfig(dev_config *oauth2.Config, userTok *oauth2.Token, ctx *co
 		return nil, fmt.Errorf("error getting email address of the profile %w", err)
 	}
 	db_path := fmt.Sprintf("db_%s.json", uuid.NewString())
+
 	log.Println("Database set as", db_path)
+
 	db_path = path.Join(exports.DATA_FOLDER, db_path)
 	return &gmail_client.GmailUserConfig{
 		EmailID: email.EmailAddress,
