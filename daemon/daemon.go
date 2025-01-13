@@ -40,8 +40,11 @@ func RunDaemon(max_retries uint8, max_notifications uint8, client_srvs *[]*gmail
 					log.Printf("error saving db database %v\n %v", client_srv.DB_Path, err)
 					return fmt.Errorf("error saving db database %v\n %w", client_srv.DB_Path, err)
 				}
-				log.Printf("Total msgs from google:- %d\n Using only:- 15", len(updated_msg_list))
-				msgs, err2 := client_srv.FetchAllMail(updated_msg_list[:15])
+				log.Printf("Total msgs from google:- %d\n Using only:- 8", len(updated_msg_list))
+				if len(updated_msg_list) > 8 {
+					updated_msg_list = updated_msg_list[:8]
+				}
+				msgs, err2 := client_srv.FetchAllMail(updated_msg_list)
 
 				if err2 != nil {
 					retry = retry + 1
