@@ -49,6 +49,7 @@ func init() {
 	//This is a temporary function to copy assets. Should be removed when assets folders are created by the installation
 	log.Println("Config Folder:-", exports.CONFIG_FOLDER)
 	log.Println("Data assets Folder:-", exports.ASSETS_PATH)
+	// log.Println("DB file set as:-", exports.CREDENTIALS_FILE)
 	err = io_helpers.CopyAssets(exports.ASSETS_SOURCE_PATH, exports.ASSETS_PATH)
 	if err != nil {
 		log.Println("Error copying assets ", err)
@@ -108,7 +109,6 @@ func main() {
 			GmailUserConfig: *gmailUserConfig,
 		}
 		*app_config.UserConfigs = append(*app_config.UserConfigs, newUserConfig)
-		fmt.Printf("App Config %v\n", app_config)
 		err = app_config.Save()
 		if err != nil {
 			log.Fatalln(err.Error())
@@ -122,6 +122,10 @@ func main() {
 		log.Fatalf("Couldn't read app config %v", err)
 	}
 	app_config := *app_config_ptr
+	if len(*app_config.UserConfigs) == 0 {
+		fmt.Println("No users found")
+		return
+	}
 	gmailServices := make([]*gmail_client.GmailService, 0, len(*app_config.UserConfigs))
 	calServices := make([]*calendar.Service, 0, len(*app_config.UserConfigs))
 	// var gmailServices *[]*gmail_client.GmailService
