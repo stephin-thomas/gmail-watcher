@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"runtime"
+	"strings"
+	"syscall"
+	"time"
 
 	"google.golang.org/api/calendar/v3"
 
@@ -160,6 +164,55 @@ func main() {
 	log.Println("cli_cmd", cli_cmd)
 
 	switch cli_cmd {
+	case "daemon":
+		{
+			// Run unified daemon with configurable services
+			log.Printf("Starting unified notification daemon")
+			log.Printf("Gmail enabled: %t, Calendar enabled: %t", CLI.Daemon.GmailEnabled, CLI.Daemon.CalendarEnabled)
+			
+			if !CLI.Daemon.GmailEnabled && !CLI.Daemon.CalendarEnabled {
+				log.Fatalf("At least one service (Gmail or Calendar) must be enabled")
+			}
+			
+			_ = io_helpers.Notify("Unified Daemon Started", "Gmail Watcher")
+			
+			// Start Gmail daemon if enabled
+			if CLI.Daemon.GmailEnabled {
+				go func() {
+					log.Printf("Starting Gmail monitoring with %d retries, %d max notifications", CLI.Daemon.GmailRetries, CLI.Daemon.GmailMaxNotifications)
+					err := daemon.RunDaemon(CLI.Daemon.GmailRetries, CLI.Daemon.GmailMaxNotifications, &gmailServices)
+					if err != nil {
+						log.Printf("Gmail daemon error: %v", err)
+						_ = io_helpers.Notify("Gmail daemon error", "Gmail Watcher: Error!")
+					}
+				}()
+			}
+			
+			// Start Calendar daemon if enabled
+			if CLI.Daemon.CalendarEnabled {
+				for _, calSrv := range calServices {
+					calService := gcalendar.NewCalendarService(calSrv)
+					go func(cs *gcalendar.CalendarService) {
+						log.Printf("Starting Calendar monitoring with %d minute intervals, notifications at %v minutes before", CLI.Daemon.CalendarCheckInterval, CLI.Daemon.CalendarNotifyBefore)
+						err := cs.RunCalendarDaemon(CLI.Daemon.CalendarCheckInterval, CLI.Daemon.CalendarNotifyBefore)
+						if err != nil {
+							log.Printf("Calendar daemon error: %v", err)
+						}
+					}(calService)
+				}
+			}
+			
+			log.Printf("Unified daemon running - monitoring enabled services")
+			
+			// Set up graceful shutdown
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			
+			// Wait for shutdown signal
+			<-sigCh
+			log.Println("Shutdown signal received, stopping daemon gracefully...")
+			_ = io_helpers.Notify("Daemon Shutting Down", "Gmail Watcher")
+		}
 	case "login delete":
 		{
 			if CLI.Login.Delete.All && len(CLI.Login.Delete.Index) > 0 {
@@ -198,9 +251,9 @@ func main() {
 			// list_len := 15
 			var msgs *[]*gmail.Message
 
-			for _, client_srv := range gmailServices {
-				list_len := CLI.Gmail.List.ListLen
-				msg_id_list, err := client_srv.GetMsgIDs()
+			for _, clientSrv := range gmailServices {
+				listLen := CLI.Gmail.List.ListLen
+				msgIDList, err := clientSrv.GetMsgIDs()
 
 				if err != nil {
 					fmt.Println("Error getting emails msg ids")
@@ -208,13 +261,13 @@ func main() {
 				}
 
 				if CLI.Gmail.List.Parallel {
-					msgs, err = client_srv.FetchAllMailConcurrent(msg_id_list.Messages[:list_len])
+					msgs, err = clientSrv.FetchAllMailConcurrent(msgIDList.Messages[:listLen])
 					if err != nil {
 						log.Fatalf("error \n%s", err)
 					}
 
 				} else {
-					msgs, err = client_srv.FetchAllMail(msg_id_list.Messages[:list_len])
+					msgs, err = clientSrv.FetchAllMail(msgIDList.Messages[:listLen])
 					if err != nil {
 						log.Fatalf("error \n%s", err)
 					}
@@ -242,16 +295,73 @@ func main() {
 		}
 	case "cal":
 		{
-			// calendar_services := make([]string, len(clients))
-			for _, cal_srv := range calServices {
+			// Show upcoming calendar events
+			for _, calSrv := range calServices {
+				calService := gcalendar.NewCalendarService(calSrv)
+				
+				// Get events for the specified number of days
+				endTime := time.Now().AddDate(0, 0, CLI.Cal.Days)
+				events, err := calService.GetEventsInRange(time.Now(), endTime, CLI.Cal.MaxResults)
 				if err != nil {
-					return
+					log.Fatalf("error getting calendar events: %v", err)
 				}
-				err = gcalendar.GetEvents(cal_srv, CLI.Cal.MaxResults)
-				if err != nil {
-					log.Fatalf("error occured when getting events %v", err)
+				
+				if len(events) == 0 {
+					fmt.Println("No upcoming events found.")
+					continue
 				}
+				
+				// Display events in an organized format
+				fmt.Printf("📅 Upcoming Events (Next %d days)\n", CLI.Cal.Days)
+				fmt.Println(strings.Repeat("=", 60))
+				
+				for _, event := range events {
+					timeStr := event.StartTime.Format("Mon, Jan 2 at 3:04 PM")
+					if event.AllDay {
+						timeStr = event.StartTime.Format("Mon, Jan 2 (All Day)")
+					}
+					
+					fmt.Printf("\n🕒 %s\n", timeStr)
+					fmt.Printf("📝 %s\n", event.Title)
+					if event.CalendarName != "" {
+						fmt.Printf("📅 Calendar: %s\n", event.CalendarName)
+					}
+					if event.Description != "" {
+						fmt.Printf("📄 %s\n", event.Description)
+					}
+					if event.Location != "" {
+						fmt.Printf("📍 %s\n", event.Location)
+					}
+				}
+				fmt.Println()
 			}
+		}
+	case "cal daemon":
+		{
+			// Run calendar notification daemon
+			log.Printf("Starting calendar notification daemon")
+			_ = io_helpers.Notify("Calendar Daemon Started", "Gmail Watcher")
+			
+			for _, calSrv := range calServices {
+				calService := gcalendar.NewCalendarService(calSrv)
+				
+				// Run daemon in background for each calendar service
+				go func(cs *gcalendar.CalendarService) {
+					err := cs.RunCalendarDaemon(CLI.Cal.Daemon.CheckInterval, CLI.Cal.Daemon.NotifyBefore)
+					if err != nil {
+						log.Printf("Calendar daemon error: %v", err)
+					}
+				}(calService)
+			}
+			
+			// Set up graceful shutdown
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			
+			// Wait for shutdown signal
+			<-sigCh
+			log.Println("Calendar daemon shutdown signal received, stopping gracefully...")
+			_ = io_helpers.Notify("Calendar Daemon Shutting Down", "Gmail Watcher")
 		}
 	default:
 		fmt.Println("unknown Command", cli_cmd)
@@ -263,7 +373,7 @@ func main() {
 func showApiEnableInstructions(err error) {
 	if err != nil {
 		fmt.Printf("Unable parse secret file:\n Follow the steps 'Enable the API' and 'Authorize credentials for a desktop application' from the following page\n https://developers.google.com/gmail/api/quickstart/go \n Note:- Ignore all other steps\n rename the downloaded file to credentials.json and copy it to ~/.config/gmail_watcher\n")
-		fmt.Printf("Make sure gmail readonlyscope and calendar readonly scope is available for the account\n%s", err)
-		log.Fatalf("%v:\nUnable to parse client secret file to config or obtain permissions\n", err)
+		fmt.Printf("Make sure gmail readonlyscope and calendar readonly scope is available for the account\n")
+		log.Fatalf("Unable to parse client secret file to config or obtain permissions\n")
 	}
 }

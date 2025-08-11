@@ -17,7 +17,7 @@ func AddRandomTokenPath(tokFiles *[]string) *string {
 	token_file_name := fmt.Sprintf("token_%s.json", uuid.NewString())
 	token_file_path := path.Join(exports.CONFIG_FOLDER, token_file_name)
 	*tokFiles = append(*tokFiles, token_file_path)
-	log.Printf("Token file name generated %v", tokFiles)
+	log.Printf("Token file name generated (count: %d)", len(*tokFiles))
 	return &token_file_path
 }
 

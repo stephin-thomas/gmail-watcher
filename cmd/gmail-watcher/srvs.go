@@ -18,58 +18,58 @@ import (
 	"google.golang.org/api/option"
 )
 
-type UserCLient struct {
+type UserClient struct {
 	*http.Client
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
-func CreateClient(dev_config *oauth2.Config, userTok *oauth2.Token) *UserCLient {
-	return &UserCLient{
-		dev_config.Client(context.Background(), userTok),
-	} // return rq_client, nil
+func CreateClient(devConfig *oauth2.Config, userToken *oauth2.Token) *UserClient {
+	return &UserClient{
+		devConfig.Client(context.Background(), userToken),
+	}
 }
 
-func GenNewGmailConfig(dev_config *oauth2.Config, userTok *oauth2.Token, ctx *context.Context) (*gmail_client.GmailUserConfig, error) {
-	client := CreateClient(dev_config, userTok)
+func GenNewGmailConfig(devConfig *oauth2.Config, userToken *oauth2.Token, ctx *context.Context) (*gmail_client.GmailUserConfig, error) {
+	client := CreateClient(devConfig, userToken)
 	srv, err := gmail.NewService(*ctx, option.WithHTTPClient(client.Client))
 	if err != nil {
-		return nil, fmt.Errorf("error creating new gmail config %w", err)
+		return nil, fmt.Errorf("error creating new gmail config: %w", err)
 	}
 	email, err := srv.Users.GetProfile("me").Do()
 	if err != nil {
-		return nil, fmt.Errorf("error getting email address of the profile %w", err)
+		return nil, fmt.Errorf("error getting email address of the profile: %w", err)
 	}
-	db_path := fmt.Sprintf("db_%s.json", uuid.NewString())
+	dbPath := fmt.Sprintf("db_%s.json", uuid.NewString())
 
-	log.Println("Database set as", db_path)
+	log.Println("Database set as", dbPath)
 
-	db_path = path.Join(exports.DATA_FOLDER, db_path)
+	dbPath = path.Join(exports.DATA_FOLDER, dbPath)
 	return &gmail_client.GmailUserConfig{
 		EmailID: email.EmailAddress,
-		DB_Path: db_path,
+		DBPath:  dbPath,
 	}, nil
 }
-func (client *UserCLient) NewGmailService(ctx *context.Context, gmail_user_config gmail_client.GmailUserConfig) (*gmail_client.GmailService, error) {
+func (client *UserClient) NewGmailService(ctx *context.Context, gmailUserConfig gmail_client.GmailUserConfig) (*gmail_client.GmailService, error) {
 	srv, err := gmail.NewService(*ctx, option.WithHTTPClient(client.Client))
 	if err != nil {
 		return nil, fmt.Errorf("unable to create gmail service %w", err)
 	}
-	var id_db map[string]struct{}
-	id_db, err = gmail_client.LoadIDList(gmail_user_config.DB_Path)
+	var idDB map[string]struct{}
+	idDB, err = gmail_client.LoadIDList(gmailUserConfig.DBPath)
 	if err != nil {
-		id_db = make(map[string]struct{})
+		idDB = make(map[string]struct{})
 		log.Printf("Unable to load id database %v\n Created an empty one in memory instead", err.Error())
 	}
-	client_service := gmail_client.GmailService{
+	clientService := gmail_client.GmailService{
 		GmailService:    srv,
-		ID_DB:           id_db,
-		GmailUserConfig: gmail_user_config,
+		IDDB:            idDB,
+		GmailUserConfig: gmailUserConfig,
 	}
 	log.Println("Successfully created client")
-	return &client_service, nil
+	return &clientService, nil
 }
 
-func (client *UserCLient) NewCalService(ctx *context.Context) (*calendar.Service, error) {
+func (client *UserClient) NewCalService(ctx *context.Context) (*calendar.Service, error) {
 	srv, err := calendar.NewService(*ctx, option.WithHTTPClient(client.Client))
 	if err != nil {
 		_ = io_helpers.Notify("Unable to retrieve Calendar", "Gmail Watcher Error!")
