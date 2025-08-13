@@ -141,16 +141,41 @@ func main() {
 	calServices := make([]*calendar.Service, 0, len(*app_config.UserConfigs))
 	// var gmailServices *[]*gmail_client.GmailService
 	// var calServices *[]*calendar.Service
-	if isGmailSubCommand(cli_cmd) {
-		for _, userConfig := range *app_config.UserConfigs {
+	if isGmailSubCommand(cli_cmd) || cli_cmd == "daemon" {
+		log.Printf("Creating Gmail services for command: %s", cli_cmd)
+		configUpdated := false
+		for i, userConfig := range *app_config.UserConfigs {
 			gmailUserClient := CreateClient(Devconfig, userConfig.UserToken)
 			gmailService, err := gmailUserClient.NewGmailService(&ctx, userConfig.GmailUserConfig)
 			if err != nil {
 				log.Fatalf("Error generating gmail service %v\n", err)
 			}
+			
+			// Update config if database path was generated
+			if (*app_config.UserConfigs)[i].GmailUserConfig.DBPath != gmailService.GmailUserConfig.DBPath {
+				(*app_config.UserConfigs)[i].GmailUserConfig.DBPath = gmailService.GmailUserConfig.DBPath
+				configUpdated = true
+				log.Printf("Updated config with DB path for %s", userConfig.EmailID)
+			}
+			
 			gmailServices = append(gmailServices, gmailService)
+			log.Printf("Created Gmail service for: %s", userConfig.EmailID)
 		}
-	} else if isCalSubCommand(cli_cmd) {
+		
+		// Save config if any database paths were updated
+		if configUpdated {
+			err = app_config.Save()
+			if err != nil {
+				log.Printf("Warning: Failed to save updated config: %v", err)
+			} else {
+				log.Println("Saved updated config with database paths")
+			}
+		}
+		
+		log.Printf("Total Gmail services created: %d", len(gmailServices))
+	}
+	
+	if isCalSubCommand(cli_cmd) || cli_cmd == "daemon" {
 		for _, userConfig := range *app_config.UserConfigs {
 			calUserClient := CreateClient(Devconfig, userConfig.UserToken)
 			calService, err := calUserClient.NewCalService(&ctx)

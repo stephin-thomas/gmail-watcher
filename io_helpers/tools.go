@@ -28,6 +28,7 @@ func CreateFolder(path string) error {
 	}
 	return nil
 }
+
 func DeleteFile(path string) error {
 	_, err := os.Stat(path)
 	if err == nil {

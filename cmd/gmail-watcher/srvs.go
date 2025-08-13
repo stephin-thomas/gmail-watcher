@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"strings"
 
 	"log"
 
@@ -54,11 +55,24 @@ func (client *UserClient) NewGmailService(ctx *context.Context, gmailUserConfig 
 	if err != nil {
 		return nil, fmt.Errorf("unable to create gmail service %w", err)
 	}
+	
+	// Generate deterministic database path based on email if not provided in config
+	if gmailUserConfig.DBPath == "" {
+		// Create a safe filename from email address
+		safeEmail := strings.ReplaceAll(gmailUserConfig.EmailID, "@", "_at_")
+		safeEmail = strings.ReplaceAll(safeEmail, ".", "_")
+		dbPath := fmt.Sprintf("db_%s.json", safeEmail)
+		gmailUserConfig.DBPath = path.Join(exports.DATA_FOLDER, dbPath)
+		log.Printf("Generated deterministic DB path for %s: %s", gmailUserConfig.EmailID, gmailUserConfig.DBPath)
+	} else {
+		log.Printf("Using configured DB path for %s: %s", gmailUserConfig.EmailID, gmailUserConfig.DBPath)
+	}
+	
 	var idDB map[string]struct{}
 	idDB, err = gmail_client.LoadIDList(gmailUserConfig.DBPath)
 	if err != nil {
 		idDB = make(map[string]struct{})
-		log.Printf("Unable to load id database %v\n Created an empty one in memory instead", err.Error())
+		log.Printf("Unable to load id database from '%s': %v\n Created an empty one in memory instead", gmailUserConfig.DBPath, err.Error())
 	}
 	clientService := gmail_client.GmailService{
 		GmailService:    srv,

@@ -34,30 +34,51 @@ func (c *GmailService) findMsg(needle string) bool {
 }
 
 func (c *GmailService) GetMsgIDs() (*gmail.ListMessagesResponse, error) {
+	log.Printf("Fetching message list for user: %s", c.EmailID)
 	msgList, err := c.GmailService.Users.Messages.List(c.EmailID).Do()
 	if err != nil {
+		log.Printf("ERROR: Failed to list messages for %s: %v", c.EmailID, err)
 		return nil, fmt.Errorf("failed to list messages for %s: %w", c.EmailID, err)
 	}
+	log.Printf("Successfully retrieved %d messages from Gmail API for %s", len(msgList.Messages), c.EmailID)
 	return msgList, nil
 }
 func (c *GmailService) UpdateMsgIDs() ([]*gmail.Message, error) {
 	var updated bool
 	var updatedMsgList []*gmail.Message
+	
+	log.Printf("Starting UpdateMsgIDs for user: %s", c.EmailID)
+	log.Printf("Current database contains %d message IDs", len(c.IDDB))
+	
 	msgList, err := c.GetMsgIDs()
 	if err != nil {
+		log.Printf("ERROR: UpdateMsgIDs failed to get message list: %v", err)
 		return nil, err
 	}
+	
+	log.Printf("Comparing %d messages from API with %d in database", len(msgList.Messages), len(c.IDDB))
+	
+	newMessageCount := 0
 	for _, msgID := range msgList.Messages {
 		if !c.findMsg(msgID.Id) {
 			if !updated {
 				updated = true
 			}
 			updatedMsgList = append(updatedMsgList, msgID)
+			newMessageCount++
+			log.Printf("Found NEW message ID: %s", msgID.Id)
 		}
 	}
+	
+	log.Printf("Found %d new messages out of %d total", newMessageCount, len(msgList.Messages))
+	
 	if updated {
+		log.Printf("Updating database with all %d message IDs", len(msgList.Messages))
 		c.IDDB = *CreateIDList(&msgList.Messages)
+	} else {
+		log.Printf("No new messages found - database unchanged")
 	}
+	
 	return updatedMsgList, nil
 }
 

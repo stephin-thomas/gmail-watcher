@@ -34,6 +34,17 @@ const (
 //   - error: Any fatal error that caused the daemon to stop
 func RunDaemon(maxRetries uint8, maxNotifications uint8, clientSrvs *[]*gmail_client.GmailService) error {
 	log.Println("Daemon started")
+	log.Printf("Gmail services count: %d", len(*clientSrvs))
+	
+	if len(*clientSrvs) == 0 {
+		log.Println("ERROR: No Gmail services provided to daemon!")
+		return fmt.Errorf("no gmail services provided")
+	}
+	
+	// Log each service for debugging
+	for i, srv := range *clientSrvs {
+		log.Printf("Gmail service %d: %s (DB: %s)", i+1, srv.EmailID, srv.DBPath)
+	}
 	
 	// Notify systemd that the service is ready (for systemd integration)
 	_, _ = daemon.SdNotify(true, daemon.SdNotifyReady)
@@ -41,28 +52,39 @@ func RunDaemon(maxRetries uint8, maxNotifications uint8, clientSrvs *[]*gmail_cl
 	// Main daemon loop - runs indefinitely until error or shutdown
 	for {
 		var retry uint8 = 0
+		log.Printf("Starting new daemon cycle with %d Gmail services", len(*clientSrvs))
 		
 		// Process each Gmail service account
-		i := 0
-		for i < len(*clientSrvs) {
-			clientSrv := (*clientSrvs)[i]
+		for i, clientSrv := range *clientSrvs {
+			log.Printf("Processing Gmail account %d: %s", i+1, clientSrv.EmailID)
 			
 			// Check for new messages since last check
 			updatedMsgList, err1 := clientSrv.UpdateMsgIDs()
 			if err1 != nil {
 				retry++
+				log.Printf("ERROR: Failed to update message IDs for %s: %v", clientSrv.EmailID, err1)
 				log.Println("Error getting msg list sleeping and trying again", err1)
+				
+				// Show error notification to user
+				errorTitle := fmt.Sprintf("Gmail Error - %s", clientSrv.EmailID)
+				errorMsg := fmt.Sprintf("Failed to fetch emails: %v", err1)
+				_ = io_helpers.Notify(errorMsg, errorTitle)
+				
 				time.Sleep(DefaultRetryInterval)
 				handleRetries(&retry, maxRetries, err1)
-				continue
+				continue // Skip to next account on error
 			}
+			
+			log.Printf("UpdateMsgIDs returned %d new messages for %s", len(updatedMsgList), clientSrv.EmailID)
 
 		// Process new messages if any were found
 		if len(updatedMsgList) > 0 {
 			// Save the updated message IDs to persistent storage
 			err := clientSrv.Save()
 			if err != nil {
-				_ = io_helpers.Notify("Error saving database", "Error!")
+				errorTitle := fmt.Sprintf("Database Error - %s", clientSrv.EmailID)
+				errorMsg := fmt.Sprintf("Failed to save message database: %v", err)
+				_ = io_helpers.Notify(errorMsg, errorTitle)
 				log.Printf("error saving db database %v\n %v", clientSrv.DBPath, err)
 				return fmt.Errorf("error saving db database %v\n %w", clientSrv.DBPath, err)
 			}
@@ -78,6 +100,13 @@ func RunDaemon(maxRetries uint8, maxNotifications uint8, clientSrvs *[]*gmail_cl
 
 			if err2 != nil {
 				retry++
+				log.Printf("ERROR: Failed to fetch message details for %s: %v", clientSrv.EmailID, err2)
+				
+				// Show error notification to user
+				errorTitle := fmt.Sprintf("Gmail Fetch Error - %s", clientSrv.EmailID)
+				errorMsg := fmt.Sprintf("Failed to fetch message details: %v", err2)
+				_ = io_helpers.Notify(errorMsg, errorTitle)
+				
 				time.Sleep(DefaultRetryInterval)
 				log.Println("error getting messages for the updated msg ids. sleeping and trying again", err2)
 				continue
@@ -88,12 +117,12 @@ func RunDaemon(maxRetries uint8, maxNotifications uint8, clientSrvs *[]*gmail_cl
 				// Send desktop notification for each new message
 				for _, msg := range *msgs {
 					sender := gmail_client.GetSender(msg)
-					_ = io_helpers.Notify(msg.Snippet, sender)
+					// Include receiving email account in notification title
+					notificationTitle := fmt.Sprintf("%s → %s", sender, clientSrv.EmailID)
+					_ = io_helpers.Notify(msg.Snippet, notificationTitle)
 				}
 			}
 		}
-			// Move to next Gmail account
-			i++
 		}
 		
 		// Sleep between daemon cycles to avoid excessive API usage
@@ -121,8 +150,8 @@ func handleRetries(retry *uint8, maxRetries uint8, err error) {
 	
 	// Send initial warning notification to user
 	if *retry == 1 {
-		errMsg := "Unable retrieve emails please check your internet connection"
-		errTitle := "Error"
+		errMsg := "Unable to retrieve emails. Please check your internet connection and account permissions."
+		errTitle := "Gmail Watcher - Connection Issue"
 		_ = io_helpers.Notify(errMsg, errTitle)
 	}
 	
@@ -131,10 +160,10 @@ func handleRetries(retry *uint8, maxRetries uint8, err error) {
 	
 	// Handle maximum retries reached
 	if *retry == maxRetries {
-		errMsg := "Shutting down Gmail Watcher due to errors"
-		errTitle := "Error"
+		errMsg := fmt.Sprintf("Max retries (%d) reached. Gmail Watcher will pause for 5 minutes before trying again.", maxRetries)
+		errTitle := "Gmail Watcher - Service Paused"
 		_ = io_helpers.Notify(errMsg, errTitle)
-		log.Printf("Shutting down gmail watcher due to errors")
+		log.Printf("Max retries reached, pausing for 5 minutes")
 		
 		// Extended sleep to prevent rapid restart loops
 		time.Sleep(5 * time.Minute)

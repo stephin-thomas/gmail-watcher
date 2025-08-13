@@ -62,21 +62,62 @@ func LoadIDList(file_name string) (map[string]struct{}, error) {
 	return id_list, nil
 }
 
-// func token_expired(token_expiry *time.Time) bool {
-// 	cur_time := time.Now()
-// 	if cur_time.Sub(*token_expiry).Seconds() >= 0 {
-// 		return true
-// 	} else {
-// 		return false
-// 	}
-// }
-
 // Get sender from the gmail.Message headers
 func GetSender(msg *gmail.Message) string {
 	for _, header := range msg.Payload.Headers {
 		if header.Name == "From" {
-			return header.Value
+			return parseFromHeader(header.Value)
 		}
 	}
 	return "<No From Address>"
+}
+
+// parseFromHeader extracts the display name from an email "From" header
+// Examples:
+// "John Doe <john@example.com>" -> "John Doe"
+// "john@example.com" -> "john@example.com"
+func parseFromHeader(fromHeader string) string {
+	// Look for pattern: "Display Name <email@domain.com>"
+	if len(fromHeader) > 0 {
+		// Check if there's a display name in quotes
+		if fromHeader[0] == '"' {
+			// Find closing quote
+			endQuote := 1
+			for endQuote < len(fromHeader) && fromHeader[endQuote] != '"' {
+				endQuote++
+			}
+			if endQuote < len(fromHeader) {
+				return fromHeader[1:endQuote]
+			}
+		}
+
+		// Check for unquoted display name before angle bracket
+		angleIndex := -1
+		for i, char := range fromHeader {
+			if char == '<' {
+				angleIndex = i
+				break
+			}
+		}
+
+		if angleIndex > 0 {
+			// Extract display name, trim spaces
+			displayName := fromHeader[:angleIndex]
+			// Remove leading/trailing spaces
+			start := 0
+			end := len(displayName)
+			for start < end && displayName[start] == ' ' {
+				start++
+			}
+			for end > start && displayName[end-1] == ' ' {
+				end--
+			}
+			if end > start {
+				return displayName[start:end]
+			}
+		}
+	}
+
+	// If no display name found, return the original header (just email)
+	return fromHeader
 }
